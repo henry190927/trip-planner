@@ -1,15 +1,57 @@
 import { useState } from 'react'
 import { AnimatePresence, motion, type PanInfo } from 'motion/react'
-import type { Trip } from '../types'
+import type { Item, Trip } from '../types'
 import { formatDate, weekday, type TripPhase, type ZonedNow } from '../lib/time'
+import { usePrefs } from '../lib/store'
 import TimelineItem from './TimelineItem'
+import { SceneArt } from './illustrations'
+import { gradient } from './ui'
 
 const swipe = { distance: 60, velocity: 400 }
+
+const visibleTo = (item: Item, viewer?: string) => !viewer || !item.who || item.who.includes(viewer)
+
+function WhoFilter({ trip }: { trip: Trip }) {
+  const viewer = usePrefs((s) => s.viewer[trip.id])
+  const setViewer = usePrefs((s) => s.setViewer)
+  const options = [{ id: undefined, name: '全部', color: 'var(--butter)', ink: 'var(--ink)' }, ...trip.travelers]
+
+  return (
+    <div className="flex gap-1 rounded-full bg-cream p-1" role="radiogroup" aria-label="看誰的行程">
+      {options.map((o) => {
+        const active = viewer === o.id
+        return (
+          <button
+            key={o.name}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => setViewer(trip.id, o.id)}
+            className="relative rounded-full px-3 py-1 text-xs font-extrabold"
+            style={{ color: active ? o.ink : 'var(--mute)' }}
+          >
+            {active && (
+              <motion.span
+                layoutId="who-pill"
+                className="absolute inset-0 rounded-full"
+                style={{ background: o.color }}
+                transition={{ type: 'spring', bounce: 0.25, duration: 0.35 }}
+              />
+            )}
+            <span className="relative">{o.name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNow; phase: TripPhase }) {
   const [index, setIndex] = useState(() => (phase.kind === 'during' ? Math.min(phase.dayIndex, trip.days.length - 1) : 0))
   const [direction, setDirection] = useState(0)
+  const viewer = usePrefs((s) => s.viewer[trip.id])
   const day = trip.days[index]
+  const items = day.items.filter((item) => visibleTo(item, viewer))
 
   const go = (next: number) => {
     if (next < 0 || next >= trip.days.length || next === index) return
@@ -24,15 +66,13 @@ export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNo
 
   // 「現在」與「下一個」：只在當天、且時間是旅程當地時區的項目上判斷
   const isToday = now.date === day.date
-  const timed = day.items
-    .map((item, i) => ({ item, i }))
-    .filter(({ item }) => item.time && /^\d{2}:\d{2}$/.test(item.time) && !item.tzLabel)
+  const timed = items.map((item, i) => ({ item, i })).filter(({ item }) => item.time && !item.tzLabel)
   const currentIdx = isToday ? timed.filter(({ item }) => item.time! <= now.time).at(-1)?.i : undefined
   const nextIdx = isToday ? timed.find(({ item }) => item.time! > now.time)?.i : undefined
 
   return (
     <>
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 bg-paper/85 px-4 py-3 backdrop-blur-xl">
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 bg-paper/85 px-4 pb-3 pt-1 backdrop-blur-xl">
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {trip.days.map((d, i) => {
             const active = i === index
@@ -41,22 +81,19 @@ export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNo
                 key={d.date}
                 type="button"
                 onClick={() => go(i)}
-                className={`relative shrink-0 rounded-2xl px-4 py-2 text-left transition-colors ${
-                  active ? 'text-white' : 'bg-card text-ink'
-                }`}
+                className={`relative shrink-0 rounded-2xl px-4 py-2 text-left ${active ? 'text-ink' : 'bg-card text-mute'}`}
               >
                 {active && (
                   <motion.span
                     layoutId="day-pill"
-                    className="absolute inset-0 rounded-2xl"
-                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))' }}
+                    className={`absolute inset-0 rounded-2xl ${gradient}`}
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.45 }}
                   />
                 )}
-                <span className="relative block text-[11px] font-semibold opacity-80">
+                <span className="relative block text-[11px] font-extrabold opacity-80">
                   DAY {i + 1}・{weekday(d.date)}
                 </span>
-                <span className="relative block text-base font-bold tabular-nums">{formatDate(d.date, false)}</span>
+                <span className="relative block text-base font-black tabular-nums">{formatDate(d.date, false)}</span>
               </button>
             )
           })}
@@ -84,22 +121,31 @@ export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNo
             onDragEnd={onDragEnd}
             className="touch-pan-y"
           >
-            <div className="mb-4 mt-2 px-1">
-              <h2 className="text-2xl font-bold">{day.title}</h2>
-              <p className="text-sm text-mute">{formatDate(day.date)}</p>
+            <div className="soft-shadow relative mb-4 mt-1 flex items-center overflow-hidden rounded-[2rem] bg-cream p-5">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-extrabold text-peach-ink">
+                  DAY {index + 1}・{formatDate(day.date)}
+                </p>
+                <h2 className="mt-1 text-2xl font-black leading-tight">{day.title}</h2>
+                <div className="mt-3">
+                  <WhoFilter trip={trip} />
+                </div>
+              </div>
+              <SceneArt scene={day.scene} className="-my-2 -mr-2 w-28 shrink-0" />
             </div>
+
             <ol>
-              {day.items.map((item, i) => (
+              {items.map((item, i) => (
                 <TimelineItem
-                  key={i}
+                  key={`${item.time}-${item.title}`}
                   item={item}
                   trip={trip}
-                  last={i === day.items.length - 1}
+                  last={i === items.length - 1}
                   state={i === currentIdx ? 'now' : i === nextIdx ? 'next' : undefined}
                 />
               ))}
             </ol>
-            <p className="mt-6 text-center text-xs text-mute">左右滑動切換天數</p>
+            <p className="mt-6 text-center text-xs font-bold text-mute">← 左右滑動切換天數 →</p>
           </motion.div>
         </AnimatePresence>
       </div>

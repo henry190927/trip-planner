@@ -61,5 +61,5 @@ export function tripPhase(trip: Trip, today: string): TripPhase {
   const toStart = daysBetween(today, trip.startDate)
   if (toStart > 0) return { kind: 'before', days: toStart }
   if (daysBetween(trip.endDate, today) > 0) return { kind: 'after' }
-  return { kind: 'during', dayIndex: -toStart }
+  return { kind: 'during', dayIndex: daysBetween(trip.startDate, today) }
 }

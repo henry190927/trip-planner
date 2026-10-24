@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { CalendarDays, ChevronLeft, Info, ListChecks, Route as RouteIcon } from 'lucide-react'
 import type { Trip } from '../types'
@@ -19,24 +18,23 @@ const nav: { tab: Tab; label: string; Icon: typeof CalendarDays }[] = [
 export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; focus?: string }) {
   const now = useNow(trip.timezone)
   const phase = tripPhase(trip, now.date)
-  const style = { '--accent': trip.theme.accent, '--accent2': trip.theme.accent2 } as CSSProperties
 
   const status =
     phase.kind === 'before' ? `${phase.days} 天後出發` : phase.kind === 'during' ? `旅行中・Day ${phase.dayIndex + 1}` : '已結束'
 
   return (
-    <div style={style} className="mx-auto min-h-dvh max-w-lg">
-      <header className="pt-safe sticky top-0 z-20 border-b border-line/70 bg-paper/85 backdrop-blur-xl">
+    <div className="mx-auto min-h-dvh max-w-lg">
+      <header className="pt-safe sticky top-0 z-20 bg-paper/85 backdrop-blur-xl">
         <div className="flex h-14 items-center gap-2 px-2">
-          <a href={href()} aria-label="回首頁" className="flex size-10 items-center justify-center rounded-full active:bg-line">
+          <a href={href()} aria-label="回首頁" className="flex size-10 items-center justify-center rounded-full active:bg-cream">
             <ChevronLeft className="size-6" />
           </a>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-bold leading-tight">
+            <h1 className="truncate text-lg font-black leading-tight">
               {trip.emoji} {trip.title}
-              <span className="ml-1.5 text-sm font-medium text-mute">{trip.subtitle}</span>
+              <span className="ml-1.5 text-sm font-bold text-mute">{trip.subtitle}</span>
             </h1>
-            <p className="text-xs text-mute">
+            <p className="text-xs font-bold text-peach-ink">
               {formatDate(trip.startDate, false)} – {formatDate(trip.endDate, false)}・{status}
             </p>
           </div>
@@ -60,26 +58,27 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
         </AnimatePresence>
       </main>
 
-      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-paper/85 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-lg grid-cols-4">
+      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 px-4">
+        <div className="soft-shadow mx-auto grid max-w-md grid-cols-4 rounded-[1.75rem] bg-card/90 p-1.5 backdrop-blur-xl">
           {nav.map(({ tab: t, label, Icon }) => {
             const active = t === tab
             return (
               <a
                 key={t}
                 href={href(trip.id, t)}
-                className={`relative flex flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition-colors ${
-                  active ? 'text-accent' : 'text-mute'
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex flex-col items-center gap-0.5 rounded-3xl py-1.5 text-[11px] font-bold transition-colors ${
+                  active ? 'text-ink' : 'text-mute'
                 }`}
               >
                 {active && (
                   <motion.span
                     layoutId="nav-pill"
-                    className="absolute top-1.5 h-8 w-14 rounded-full bg-accent/12"
+                    className="absolute inset-0 rounded-3xl bg-[linear-gradient(135deg,var(--sky),var(--peach))]"
                     transition={{ type: 'spring', bounce: 0.25, duration: 0.4 }}
                   />
                 )}
-                <Icon className="relative size-6" strokeWidth={active ? 2.2 : 1.8} />
+                <Icon className="relative size-6" strokeWidth={active ? 2.4 : 1.9} />
                 <span className="relative">{label}</span>
               </a>
             )

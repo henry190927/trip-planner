@@ -1,37 +1,38 @@
 @import 'tailwindcss';
 
+/* inline：讓 utility 直接引用 var(--x)，元件層覆寫變數時才會生效 */
 @theme inline {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang TC', 'Noto Sans TC', 'Apple SD Gothic Neo',
-    'Noto Sans KR', system-ui, sans-serif;
+  --font-sans: ui-rounded, -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'PingFang TC', 'Noto Sans TC',
+    'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
   --color-paper: var(--paper);
   --color-card: var(--card);
   --color-ink: var(--ink);
   --color-mute: var(--mute);
   --color-line: var(--line);
-  --color-accent: var(--accent);
-  --color-accent2: var(--accent2);
+  --color-cream: var(--cream);
+  --color-butter: var(--butter);
+  --color-sky: var(--sky);
+  --color-sky-ink: var(--sky-ink);
+  --color-peach: var(--peach);
+  --color-peach-ink: var(--peach-ink);
+  --color-leaf: var(--leaf);
 }
 
+/* 主色票：FCF0DA / FFF4DE / FFE8C4 / 97D7FF / FFCCB8；-ink 是同色系、可當文字的深色 */
 :root {
-  --paper: #f5f3ef;
-  --card: #ffffff;
-  --ink: #1b1a1f;
-  --mute: #75727d;
-  --line: #e7e3dc;
-  --accent: #7c5cff;
-  --accent2: #ff6fa3;
+  --paper: #fff4de;
+  --card: #fffdf8;
+  --cream: #fcf0da;
+  --butter: #ffe8c4;
+  --sky: #97d7ff;
+  --sky-ink: #1f74ad;
+  --peach: #ffccb8;
+  --peach-ink: #c4583a;
+  --leaf: #a8dda0;
+  --ink: #4a4458;
+  --mute: #8b8295;
+  --line: #f1e3c8;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #111015;
-    --card: #1c1b22;
-    --ink: #f1eff6;
-    --mute: #9a96a6;
-    --line: #2c2a34;
-    color-scheme: dark;
-  }
 }
 
 html,
@@ -55,4 +56,114 @@ body {
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top);
+}
+
+.soft-shadow {
+  box-shadow:
+    0 1px 0 rgb(74 68 88 / 0.04),
+    0 6px 18px -6px rgb(196 140 80 / 0.25);
+}
+
+/* 插圖動畫 */
+svg [class^='a-'],
+svg [class*=' a-'] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.a-bob {
+  animation: bob 3s ease-in-out infinite;
+}
+.a-sway {
+  animation: sway 3.2s ease-in-out infinite;
+  transform-box: view-box !important;
+}
+.a-twinkle {
+  animation: twinkle 2.2s ease-in-out infinite;
+}
+.a-glow {
+  animation: glow 2.4s ease-in-out infinite;
+}
+.a-wave {
+  animation: wave 1.6s ease-in-out infinite;
+  transform-box: view-box !important;
+}
+.a-wave-arm {
+  animation: wave-arm 1.2s ease-in-out infinite;
+  transform-box: view-box !important;
+}
+.a-hop {
+  animation: hop 1.8s ease-in-out infinite;
+  transform-box: view-box !important;
+}
+.a-fly {
+  animation: fly 4s ease-in-out infinite;
+}
+.a-cloud {
+  animation: cloud 6s ease-in-out infinite;
+}
+.a-dash {
+  animation: dash 1.6s linear infinite;
+}
+.a-steam {
+  animation: steam 2.4s ease-in-out infinite;
+}
+.a-zzz {
+  animation: zzz 2.4s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes sway {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.6) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(20deg); }
+}
+@keyframes glow {
+  0%, 100% { opacity: 0.2; transform: scale(0.9); }
+  50% { opacity: 0.5; transform: scale(1.08); }
+}
+@keyframes wave {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(10deg); }
+}
+@keyframes wave-arm {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-22deg); }
+}
+@keyframes hop {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px) rotate(-6deg); }
+}
+@keyframes fly {
+  0%, 100% { transform: translate(-3px, 3px) rotate(-3deg); }
+  50% { transform: translate(4px, -5px) rotate(2deg); }
+}
+@keyframes cloud {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-6px); }
+}
+@keyframes dash {
+  to { stroke-dashoffset: -22; }
+}
+@keyframes steam {
+  0% { opacity: 0; transform: translateY(6px); }
+  40% { opacity: 0.6; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+@keyframes zzz {
+  0% { opacity: 0; transform: translate(0, 4px); }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: translate(6px, -8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  svg [class^='a-'],
+  svg [class*=' a-'] {
+    animation: none !important;
+  }
 }
