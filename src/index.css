@@ -32,6 +32,7 @@
   --ink: #4a4458;
   --mute: #8b8295;
   --line: #f1e3c8;
+  --frame: 430px;
   color-scheme: light;
 }
 
@@ -42,6 +43,20 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+}
+
+/* 電腦上開：維持手機寬度置中，兩側黑底 */
+#root {
+  max-width: var(--frame);
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: var(--paper);
+}
+@media (min-width: 480px) {
+  html,
+  body {
+    background: #000;
+  }
 }
 
 .no-scrollbar {
