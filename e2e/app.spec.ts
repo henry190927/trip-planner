@@ -10,10 +10,10 @@ test('首頁顯示旅程卡', async ({ page }) => {
 
 test('只看「她」的行程時，不會出現「我」的項目', async ({ page }) => {
   await page.goto(`./${trip}`)
-  await expect(page.getByText('機場巴士 6002 → 弘大')).toBeVisible()
+  await expect(page.getByText('帶兩人的行李搭計程車')).toBeVisible()
   await page.getByRole('radio', { name: '她' }).click()
-  await expect(page.getByText('機場巴士 6002 → 弘大')).toHaveCount(0)
-  await expect(page.getByText('AREX + 9 號線 → KBS Arena')).toBeVisible()
+  await expect(page.getByText('帶兩人的行李搭計程車')).toHaveCount(0)
+  await expect(page.getByText('取票・簡單吃晚餐')).toBeVisible()
   await page.getByRole('radio', { name: '全部' }).click()
   await page.screenshot({ path: 'e2e/screenshots/plan.png', fullPage: true })
 })
@@ -49,7 +49,7 @@ test('清單勾選重新整理後還在', async ({ page }) => {
 
 test('左右滑動切換天數', async ({ page }) => {
   await page.goto(`./${trip}`)
-  const box = (await page.getByRole('heading', { name: '落地分頭行動' }).boundingBox())!
+  const box = (await page.getByRole('heading', { name: '落地直奔場館' }).boundingBox())!
   await page.mouse.move(box.x + 200, box.y + 200)
   await page.mouse.down()
   await page.mouse.move(box.x + 20, box.y + 200, { steps: 8 })
