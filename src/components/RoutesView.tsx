@@ -113,7 +113,11 @@ function RouteCard({ route, trip, highlighted }: { route: Route; trip: Trip; hig
 
 export default function RoutesView({ trip, focus }: { trip: Trip; focus?: string }) {
   useEffect(() => {
-    if (!focus) return window.scrollTo({ top: 0 })
+    if (!focus) {
+      // scrollTo 在新版瀏覽器會回傳 Promise，不能當 effect 的回傳值
+      window.scrollTo({ top: 0 })
+      return
+    }
     const t = setTimeout(() => document.getElementById(`route-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220)
     return () => clearTimeout(t)
   }, [focus])
