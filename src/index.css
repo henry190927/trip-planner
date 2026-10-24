@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang TC', 'Noto Sans TC', 'Apple SD Gothic Neo',
+    'Noto Sans KR', system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-mute: var(--mute);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+}
+
+:root {
+  --paper: #f5f3ef;
+  --card: #ffffff;
+  --ink: #1b1a1f;
+  --mute: #75727d;
+  --line: #e7e3dc;
+  --accent: #7c5cff;
+  --accent2: #ff6fa3;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #111015;
+    --card: #1c1b22;
+    --ink: #f1eff6;
+    --mute: #9a96a6;
+    --line: #2c2a34;
+    color-scheme: dark;
+  }
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
