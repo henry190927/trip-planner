@@ -29,7 +29,7 @@ export default function DriverCard({ place, phrase }: { place: Place; phrase?: s
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-50 flex flex-col bg-white p-6 text-black"
+              className="fixed inset-y-0 left-1/2 z-50 flex w-full max-w-(--frame) -translate-x-1/2 flex-col bg-white p-6 text-black"
             >
               <button type="button" aria-label="關閉" className="pt-safe ml-auto flex size-11 items-center justify-center rounded-full bg-black/5">
                 <X className="size-6" />

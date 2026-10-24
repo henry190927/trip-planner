@@ -58,7 +58,7 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
         </AnimatePresence>
       </main>
 
-      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 px-4">
+      <nav className="pb-safe fixed bottom-0 left-1/2 z-30 w-full max-w-(--frame) -translate-x-1/2 px-4">
         <div className="soft-shadow mx-auto grid max-w-md grid-cols-4 rounded-[1.75rem] bg-card/90 p-1.5 backdrop-blur-xl">
           {nav.map(({ tab: t, label, Icon }) => {
             const active = t === tab
