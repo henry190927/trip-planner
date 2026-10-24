@@ -49,7 +49,10 @@ function FlightCard({ flight }: { flight: Flight }) {
 }
 
 export default function InfoView({ trip }: { trip: Trip }) {
-  useEffect(() => window.scrollTo({ top: 0 }), [])
+  // 新版瀏覽器的 scrollTo 會回傳 Promise，不能直接當 effect 的回傳值（React 會把它當成清理函式呼叫）
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [])
 
   return (
     <div className="pt-1">
