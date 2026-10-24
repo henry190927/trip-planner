@@ -11,18 +11,26 @@ import {
 } from 'lucide-react'
 import type { Item, ItemKind, Trip } from '../types'
 import { href } from '../lib/router'
-import { Chip, MapButton } from './ui'
+import { Chip, MapButton, WhoChip } from './ui'
 import DriverCard from './DriverCard'
+import { Bowl, Lightstick, ShoppingBag as BagArt } from './illustrations'
 
-const icons: Record<ItemKind, typeof Plane> = {
-  flight: Plane,
-  transit: TrainFront,
-  stay: BedDouble,
-  food: UtensilsCrossed,
-  sight: Camera,
-  shopping: ShoppingBag,
-  concert: Ticket,
-  task: ClipboardList,
+const kinds: Record<ItemKind, { Icon: typeof Plane; bg: string }> = {
+  flight: { Icon: Plane, bg: 'var(--sky)' },
+  transit: { Icon: TrainFront, bg: 'var(--sky)' },
+  stay: { Icon: BedDouble, bg: 'var(--butter)' },
+  food: { Icon: UtensilsCrossed, bg: 'var(--peach)' },
+  sight: { Icon: Camera, bg: 'var(--butter)' },
+  shopping: { Icon: ShoppingBag, bg: 'var(--peach)' },
+  concert: { Icon: Ticket, bg: 'var(--peach)' },
+  task: { Icon: ClipboardList, bg: 'var(--cream)' },
+}
+
+// 重點項目在卡片右側放一張小插圖
+const accentArt: Partial<Record<ItemKind, typeof Lightstick>> = {
+  concert: Lightstick,
+  food: Bowl,
+  shopping: BagArt,
 }
 
 export default function TimelineItem({
@@ -36,46 +44,45 @@ export default function TimelineItem({
   last: boolean
   state?: 'now' | 'next'
 }) {
-  const Icon = icons[item.kind]
-  const highlight = item.kind === 'concert' || item.kind === 'flight'
+  const { Icon, bg } = kinds[item.kind]
+  const Art = item.tentative ? undefined : accentArt[item.kind]
+  const who = item.who?.map((id) => trip.travelers.find((t) => t.id === id)).filter((t) => t !== undefined)
 
   return (
     <li className="relative flex gap-3">
       <div className="w-12 shrink-0 pt-3.5 text-right">
-        <p className="text-sm font-bold tabular-nums">{item.time ?? ''}</p>
-        {item.end && <p className="text-[11px] tabular-nums text-mute">{item.end}</p>}
+        <p className="text-sm font-black tabular-nums">{item.time ?? ''}</p>
+        {item.end && <p className="text-[11px] font-bold tabular-nums text-mute">{item.end}</p>}
       </div>
 
       <div className="relative flex w-8 shrink-0 flex-col items-center">
         <span
-          className={`relative z-[1] mt-2.5 flex size-8 items-center justify-center rounded-full ${
-            highlight ? 'text-white' : 'bg-card text-accent ring-1 ring-line'
-          }`}
-          style={highlight ? { background: 'linear-gradient(135deg, var(--accent), var(--accent2))' } : undefined}
+          className="relative z-[1] mt-2.5 flex size-8 items-center justify-center rounded-full border-2 border-card text-ink"
+          style={{ background: bg }}
         >
-          <Icon className="size-4" />
-          {state === 'now' && <span className="absolute inset-0 animate-ping rounded-full bg-accent/40" />}
+          <Icon className="size-4" strokeWidth={2.2} />
+          {state === 'now' && <span className="absolute inset-0 animate-ping rounded-full bg-peach" />}
         </span>
-        {!last && <span className="w-px flex-1 bg-line" />}
+        {!last && <span className="w-0.5 flex-1 rounded-full bg-butter" />}
       </div>
 
       <div
-        className={`mb-3 min-w-0 flex-1 rounded-2xl bg-card p-3.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] ${
-          state === 'now' ? 'ring-2 ring-accent' : ''
-        } ${item.tentative ? 'border border-dashed border-line bg-transparent shadow-none' : ''}`}
+        className={`relative mb-3 min-w-0 flex-1 overflow-hidden rounded-3xl p-3.5 ${
+          item.tentative ? 'border-2 border-dashed border-butter bg-cream/50' : 'soft-shadow bg-card'
+        } ${state === 'now' ? 'ring-[3px] ring-peach' : ''}`}
       >
-        <div className="flex flex-wrap items-center gap-1.5">
-          {state === 'now' && <Chip tone="accent">現在</Chip>}
-          {state === 'next' && <Chip>下一個</Chip>}
+        {Art && <Art className="pointer-events-none absolute -right-3 -top-2 w-20 opacity-90" />}
+        <div className={`flex flex-wrap items-center gap-1.5 ${Art ? 'pr-14' : ''}`}>
+          {state === 'now' && <Chip tone="peach">現在</Chip>}
+          {state === 'next' && <Chip tone="sky">下一個</Chip>}
+          {who?.map((t) => <WhoChip key={t.id} traveler={t} />)}
           {item.tzLabel && <Chip>{item.tzLabel}時間</Chip>}
-          {item.tentative && <Chip>建議</Chip>}
+          {item.tentative && <Chip tone="warn">建議</Chip>}
         </div>
-        <h3 className="mt-1 font-semibold leading-snug">{item.title}</h3>
-        {item.place?.local && <p className="text-xs text-mute">{item.place.local}</p>}
+        <h3 className={`mt-1 font-extrabold leading-snug ${Art ? 'pr-14' : ''}`}>{item.title}</h3>
+        {item.place?.local && <p className="text-xs font-bold text-mute">{item.place.local}</p>}
         {item.note && <p className="mt-1.5 text-sm leading-relaxed text-mute">{item.note}</p>}
-        {item.verify && (
-          <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">⏳ {item.verify}</p>
-        )}
+        {item.verify && <p className="mt-2 text-xs font-bold text-[#a8661c]">⏳ {item.verify}</p>}
 
         {(item.place || item.routeId) && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -84,7 +91,7 @@ export default function TimelineItem({
             {item.routeId && (
               <a
                 href={href(trip.id, 'routes', item.routeId)}
-                className="inline-flex items-center gap-0.5 rounded-full bg-line/70 px-3 py-1.5 text-xs font-semibold active:scale-95"
+                className="inline-flex items-center gap-0.5 rounded-full bg-peach/50 px-3 py-1.5 text-xs font-bold text-peach-ink active:scale-95"
               >
                 交通指南
                 <ChevronRight className="size-3.5" />

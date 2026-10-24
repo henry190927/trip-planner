@@ -1,0 +1,153 @@
+import { z } from 'zod'
+
+// 旅程資料的唯一規格：型別由這裡推導，資料檔的完整性由 src/trips/trips.test.ts 用它檢查。
+// app 只 import 型別，所以 zod 不會進到前端 bundle。
+
+const hhmm = z.string().regex(/^\d{2}:\d{2}$/, '時間格式要是 HH:MM')
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式要是 YYYY-MM-DD')
+
+export const placeSchema = z.object({
+  name: z.string(),
+  /** 當地語言名稱（地圖搜尋、給當地人看） */
+  local: z.string().optional(),
+  address: z.string().optional(),
+  /** 當地語言地址，「給司機看」全螢幕卡會用大字顯示 */
+  addressLocal: z.array(z.string()).optional(),
+  /** 地圖搜尋字串；省略時用 local ?? name */
+  mapQuery: z.string().optional(),
+  /** 指定地圖連結（例如 Naver 的地點分享連結），優先於搜尋 */
+  mapLink: z.url().optional(),
+})
+
+export const itemKinds = ['flight', 'transit', 'stay', 'food', 'sight', 'shopping', 'concert', 'task'] as const
+
+export const itemSchema = z.object({
+  time: hhmm.optional(),
+  end: hhmm.optional(),
+  /** 時間不是旅程當地時區時填（例如出發地的起飛時間） */
+  tzLabel: z.string().optional(),
+  kind: z.enum(itemKinds),
+  title: z.string(),
+  /** 只有部分旅伴參加時填 traveler id；省略 = 全員 */
+  who: z.array(z.string()).optional(),
+  place: placeSchema.optional(),
+  note: z.string().optional(),
+  /** 連到「交通」分頁的某條路線 */
+  routeId: z.string().optional(),
+  /** 只是建議、尚未確定 */
+  tentative: z.boolean().optional(),
+  /** 出發前還要確認的事 */
+  verify: z.string().optional(),
+})
+
+export const scenes = ['depart', 'concert', 'stroll', 'home'] as const
+
+export const daySchema = z.object({
+  date: isoDate,
+  title: z.string(),
+  /** 每日頁首的插圖 */
+  scene: z.enum(scenes),
+  items: z.array(itemSchema),
+})
+
+const flightEndSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  terminal: z.string(),
+  time: hhmm,
+  tzLabel: z.string(),
+})
+
+export const flightSchema = z.object({
+  label: z.string(),
+  date: isoDate,
+  airline: z.string(),
+  number: z.string(),
+  aircraft: z.string().optional(),
+  cabin: z.string().optional(),
+  duration: z.string(),
+  from: flightEndSchema,
+  to: flightEndSchema,
+  notes: z.array(z.string()).optional(),
+})
+
+export const staySchema = z.object({
+  place: placeSchema,
+  checkIn: z.string(),
+  checkOut: z.string(),
+  notes: z.array(z.string()).optional(),
+  verify: z.string().optional(),
+})
+
+export const routeOptionSchema = z.object({
+  label: z.string(),
+  mode: z.string(),
+  /** 分頁標籤用的短名稱，省略時用 mode */
+  tab: z.string().optional(),
+  recommended: z.boolean().optional(),
+  duration: z.string(),
+  cost: z.string(),
+  steps: z.array(z.string()).min(1),
+  pros: z.array(z.string()).optional(),
+  cons: z.array(z.string()).optional(),
+  verify: z.string().optional(),
+})
+
+export const routeSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  /** 這條路線是誰在走；省略 = 全員 */
+  who: z.array(z.string()).optional(),
+  when: z.string().optional(),
+  summary: z.string(),
+  options: z.array(routeOptionSchema).min(1),
+  /** 出狀況時的備案 */
+  fallback: z.array(z.string()).optional(),
+})
+
+export const linkSchema = z.object({ label: z.string(), url: z.url() })
+
+export const tipSchema = z.object({
+  title: z.string(),
+  body: z.array(z.string()),
+  level: z.enum(['info', 'warn']).optional(),
+  links: z.array(linkSchema).optional(),
+})
+
+export const tipSectionSchema = z.object({ title: z.string(), tips: z.array(tipSchema) })
+
+export const checklistGroupSchema = z.object({
+  title: z.string(),
+  items: z.array(z.object({ id: z.string(), label: z.string() })),
+})
+
+export const travelerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** 這個人在畫面上的代表色（淺色底）與文字色 */
+  color: z.string(),
+  ink: z.string(),
+})
+
+export const tripSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  subtitle: z.string(),
+  emoji: z.string(),
+  /** IANA 時區，用來判斷「現在」與倒數 */
+  timezone: z.string(),
+  startDate: isoDate,
+  endDate: isoDate,
+  mapProvider: z.enum(['naver', 'kakao', 'google']),
+  /** 給司機看的卡片上方那句話（當地語言） */
+  driverPhrase: z.string().optional(),
+  travelers: z.array(travelerSchema).min(1),
+  flights: z.array(flightSchema),
+  stays: z.array(staySchema),
+  days: z.array(daySchema).min(1),
+  routes: z.array(routeSchema),
+  tips: z.array(tipSectionSchema),
+  checklist: z.array(checklistGroupSchema),
+  /** 尚未提供的資料 */
+  pending: z.array(z.string()).optional(),
+})

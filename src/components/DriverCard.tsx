@@ -14,7 +14,7 @@ export default function DriverCard({ place, phrase }: { place: Place; phrase?: s
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-paper active:scale-95"
+        className="inline-flex items-center gap-1 rounded-full bg-butter px-3 py-1.5 text-xs font-bold text-ink active:scale-95"
       >
         <CarFront className="size-3.5" />
         給司機看

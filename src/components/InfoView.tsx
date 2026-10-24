@@ -2,15 +2,15 @@ import { useEffect } from 'react'
 import { AlertTriangle, ChevronDown, ExternalLink, Plane } from 'lucide-react'
 import type { Flight, Trip } from '../types'
 import { formatDate } from '../lib/time'
-import { Card, Chip, MapButton, SectionTitle, Verify } from './ui'
+import { Card, Chip, MapButton, SectionTitle, Verify, gradient } from './ui'
+import { SleepyHouse, Suitcase } from './illustrations'
 import DriverCard from './DriverCard'
 
 function FlightCard({ flight }: { flight: Flight }) {
   return (
     <Card className="overflow-hidden p-0">
       <div
-        className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-white"
-        style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))' }}
+        className={`flex items-center justify-between px-4 py-2.5 text-sm font-black ${gradient}`}
       >
         <span>
           {flight.label}・{formatDate(flight.date)}
@@ -20,7 +20,7 @@ function FlightCard({ flight }: { flight: Flight }) {
       <div className="flex items-center gap-3 px-4 pt-4">
         {[flight.from, flight.to].map((end, i) => (
           <div key={end.code} className={`flex-1 ${i === 1 ? 'order-3 text-right' : ''}`}>
-            <p className="text-3xl font-black tracking-tight">{end.code}</p>
+            <p className="text-3xl font-black tracking-tight text-sky-ink">{end.code}</p>
             <p className="text-xl font-bold tabular-nums">{end.time}</p>
             <p className="text-xs text-mute">
               {end.name} <span className="font-bold text-ink">{end.terminal}</span>
@@ -29,11 +29,11 @@ function FlightCard({ flight }: { flight: Flight }) {
           </div>
         ))}
         <div className="order-2 flex flex-col items-center text-mute">
-          <Plane className="size-5 text-accent" />
+          <Plane className="a-bob size-6 text-peach-ink" />
           <span className="mt-1 whitespace-nowrap text-[11px]">{flight.duration}</span>
         </div>
       </div>
-      <div className="mx-4 mt-4 border-t border-dashed border-line" />
+      <div className="mx-4 mt-4 border-t-2 border-dashed border-butter" />
       <div className="px-4 py-3 text-xs text-mute">
         {flight.airline}
         {flight.aircraft && `・${flight.aircraft}`}
@@ -56,11 +56,12 @@ export default function InfoView({ trip }: { trip: Trip }) {
       {trip.pending?.length ? (
         <>
           <SectionTitle>還缺的資料</SectionTitle>
-          <Card className="border border-amber-400/40">
-            <ul className="space-y-2 text-sm leading-relaxed">
+          <Card className="relative overflow-hidden bg-butter/70">
+            <Suitcase className="absolute -right-3 -top-2 w-24 opacity-90" />
+            <ul className="space-y-2 pr-16 text-sm font-bold leading-relaxed">
               {trip.pending.map((p) => (
                 <li key={p} className="flex gap-2">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-peach-ink" />
                   {p}
                 </li>
               ))}
@@ -79,15 +80,16 @@ export default function InfoView({ trip }: { trip: Trip }) {
       <SectionTitle>住宿</SectionTitle>
       <div className="space-y-4">
         {trip.stays.map((s) => (
-          <Card key={s.place.name}>
-            <h3 className="text-lg font-bold">{s.place.name}</h3>
+          <Card key={s.place.name} className="relative overflow-hidden">
+            <SleepyHouse className="absolute -right-2 -top-2 w-24" />
+            <h3 className="pr-20 text-lg font-black">{s.place.name}</h3>
             {s.place.local && <p className="text-sm text-mute">{s.place.local}</p>}
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-xl bg-line/50 p-2.5">
+              <div className="rounded-2xl bg-cream p-2.5">
                 <p className="text-[11px] text-mute">Check-in</p>
                 <p className="font-semibold">{s.checkIn}</p>
               </div>
-              <div className="rounded-xl bg-line/50 p-2.5">
+              <div className="rounded-2xl bg-cream p-2.5">
                 <p className="text-[11px] text-mute">Check-out</p>
                 <p className="font-semibold">{s.checkOut}</p>
               </div>
@@ -119,10 +121,10 @@ export default function InfoView({ trip }: { trip: Trip }) {
       {trip.tips.map((section) => (
         <div key={section.title}>
           <SectionTitle>{section.title}</SectionTitle>
-          <Card className="divide-y divide-line p-0">
+          <Card className="divide-y-2 divide-cream p-0">
             {section.tips.map((tip) => (
               <details key={tip.title} className="group px-4 py-3.5">
-                <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center gap-2 font-extrabold [&::-webkit-details-marker]:hidden">
                   <span className="flex-1">{tip.title}</span>
                   {tip.level === 'warn' && <Chip tone="warn">重要</Chip>}
                   <ChevronDown className="size-4 text-mute transition-transform group-open:rotate-180" />
@@ -140,7 +142,7 @@ export default function InfoView({ trip }: { trip: Trip }) {
                         href={l.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full bg-accent/12 px-3 py-1.5 text-xs font-semibold text-accent active:scale-95"
+                        className="inline-flex items-center gap-1 rounded-full bg-sky/35 px-3 py-1.5 text-xs font-bold text-sky-ink active:scale-95"
                       >
                         <ExternalLink className="size-3.5" />
                         {l.label}

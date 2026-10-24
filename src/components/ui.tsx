@@ -1,31 +1,51 @@
 import type { ReactNode } from 'react'
 import { MapPin } from 'lucide-react'
-import type { MapProvider, Place } from '../types'
+import type { MapProvider, Place, Traveler } from '../types'
 import { mapLabel, mapUrl } from '../lib/maps'
 
-export function Chip({ children, tone = 'mute' }: { children: ReactNode; tone?: 'mute' | 'accent' | 'warn' }) {
+export const gradient = 'bg-[linear-gradient(135deg,var(--sky),var(--peach))]'
+
+export function Chip({ children, tone = 'mute' }: { children: ReactNode; tone?: 'mute' | 'sky' | 'peach' | 'warn' }) {
   const tones = {
-    mute: 'bg-line/70 text-mute',
-    accent: 'bg-accent/12 text-accent',
-    warn: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+    mute: 'bg-cream text-mute',
+    sky: 'bg-sky/40 text-sky-ink',
+    peach: 'bg-peach/50 text-peach-ink',
+    warn: 'bg-butter text-[#a8661c]',
   }
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tones[tone]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${tones[tone]}`}>
       {children}
+    </span>
+  )
+}
+
+export function WhoChip({ traveler }: { traveler: Traveler }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
+      style={{ background: traveler.color, color: traveler.ink }}
+    >
+      <span className="size-1.5 rounded-full" style={{ background: traveler.ink }} />
+      {traveler.name}
     </span>
   )
 }
 
 export function Card({ children, className = '', id }: { children: ReactNode; className?: string; id?: string }) {
   return (
-    <section id={id} className={`rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] ${className}`}>
+    <section id={id} className={`soft-shadow rounded-3xl bg-card p-4 ${className}`}>
       {children}
     </section>
   )
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-3 mt-7 px-1 text-xs font-semibold tracking-widest text-mute">{children}</h2>
+  return (
+    <h2 className="mb-3 mt-8 flex items-center gap-2 px-1 text-sm font-extrabold text-ink">
+      <span className={`h-3.5 w-1.5 rounded-full ${gradient}`} />
+      {children}
+    </h2>
+  )
 }
 
 export function MapButton({ provider, place, compact }: { provider: MapProvider; place: Place; compact?: boolean }) {
@@ -34,7 +54,7 @@ export function MapButton({ provider, place, compact }: { provider: MapProvider;
       href={mapUrl(provider, place)}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-full bg-accent/12 px-3 py-1.5 text-xs font-semibold text-accent active:scale-95"
+      className="inline-flex items-center gap-1 rounded-full bg-sky/35 px-3 py-1.5 text-xs font-bold text-sky-ink active:scale-95"
     >
       <MapPin className="size-3.5" />
       {compact ? '地圖' : `開 ${mapLabel[provider]}`}
@@ -44,8 +64,8 @@ export function MapButton({ provider, place, compact }: { provider: MapProvider;
 
 export function Verify({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-2 rounded-xl bg-amber-400/12 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-      <span className="font-bold">待確認・</span>
+    <p className="mt-2 rounded-2xl bg-butter px-3 py-2 text-xs leading-relaxed text-[#8a5a1c]">
+      <span className="font-extrabold">待確認・</span>
       {children}
     </p>
   )
