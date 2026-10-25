@@ -7,6 +7,7 @@ import DayView from './DayView'
 import RoutesView from './RoutesView'
 import InfoView from './InfoView'
 import ChecklistView from './ChecklistView'
+import ChatSheet from './ChatSheet'
 
 const nav: { tab: Tab; label: string; Icon: typeof CalendarDays }[] = [
   { tab: 'plan', label: '行程', Icon: CalendarDays },
@@ -57,6 +58,8 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <ChatSheet trip={trip} />
 
       <nav className="pb-safe fixed bottom-0 left-1/2 z-30 w-full max-w-(--frame) -translate-x-1/2 px-4">
         <div className="soft-shadow mx-auto grid max-w-md grid-cols-4 rounded-[1.75rem] bg-card/90 p-1.5 backdrop-blur-xl">

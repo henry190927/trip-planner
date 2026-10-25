@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trip-chat",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "kv_namespaces": [{ "binding": "TRIPS", "id": "0f6242a045fb4b908da7a86f9ab10c00" }],
+  "vars": {
+    "MODEL": "gemini-2.5-flash",
+    "ALLOWED_ORIGINS": "https://henry190927.github.io"
+  }
+  // 機密設定用 `wrangler secret put` 設定，不寫在這裡：GEMINI_API_KEY、APP_PASSCODE
+}

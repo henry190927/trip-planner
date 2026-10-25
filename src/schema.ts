@@ -151,3 +151,41 @@ export const tripSchema = z.object({
   /** 尚未提供的資料 */
   pending: z.array(z.string()).optional(),
 })
+
+// ---- AI 能對行程做的修改動作 ----
+// AI 不直接改整份資料，只能送出這幾種動作；套用後再整份用 tripSchema 驗證一次。
+
+/** 修改既有項目時要改的欄位；值給 null 代表刪掉那個欄位 */
+const itemChangesSchema = z
+  .object({
+    time: hhmm.nullable(),
+    end: hhmm.nullable(),
+    tzLabel: z.string().nullable(),
+    kind: z.enum(itemKinds),
+    title: z.string(),
+    who: z.array(z.string()).nullable(),
+    place: placeSchema.nullable(),
+    note: z.string().nullable(),
+    routeId: z.string().nullable(),
+    tentative: z.boolean().nullable(),
+    verify: z.string().nullable(),
+  })
+  .partial()
+
+export const opSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('add_item'), date: isoDate, item: itemSchema }),
+  z.object({
+    op: z.literal('update_item'),
+    date: isoDate,
+    /** 用目前的標題找項目；同一天有同名項目時再加 time 區分 */
+    title: z.string(),
+    time: hhmm.optional(),
+    changes: itemChangesSchema,
+  }),
+  z.object({ op: z.literal('remove_item'), date: isoDate, title: z.string(), time: hhmm.optional() }),
+  z.object({ op: z.literal('add_checklist_item'), group: z.string(), label: z.string() }),
+  z.object({ op: z.literal('add_pending'), text: z.string() }),
+  z.object({ op: z.literal('remove_pending'), text: z.string() }),
+])
+
+export const opsSchema = z.array(opSchema).min(1).max(20)

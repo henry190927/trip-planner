@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import { ChevronRight } from 'lucide-react'
-import { trips, upcoming } from '../trips'
+import { upcoming } from '../trips'
+import { useTripList } from '../lib/tripStore'
 import { href } from '../lib/router'
 import { formatDate, nowIn, tripPhase } from '../lib/time'
 import type { Trip } from '../types'
@@ -15,6 +16,7 @@ function phaseText(trip: Trip) {
 }
 
 export default function TripList() {
+  const trips = useTripList()
   return (
     <div className="pt-safe mx-auto min-h-dvh max-w-lg px-4 pb-16">
       <header className="relative flex items-end justify-between pb-4 pt-8">
