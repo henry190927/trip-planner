@@ -176,9 +176,20 @@ svg [class*=' a-'] {
   100% { opacity: 0; transform: translate(6px, -8px); }
 }
 
+/* 系統開了「減少動態效果」：停掉會移動、旋轉的動畫，只保留淡入淡出（不會造成暈眩） */
 @media (prefers-reduced-motion: reduce) {
   svg [class^='a-'],
   svg [class*=' a-'] {
     animation: none !important;
   }
+  svg .a-twinkle,
+  svg .a-glow,
+  svg .a-steam,
+  svg .a-zzz {
+    animation: fade 2.4s ease-in-out infinite !important;
+  }
+}
+@keyframes fade {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
 }
