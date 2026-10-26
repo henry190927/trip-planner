@@ -6,7 +6,7 @@ import type { Env } from './env'
 import { GeminiError } from './gemini'
 import { loadTrip, saveTrip, tripIds, undo } from './store'
 
-export { GeminiRelay } from './relay'
+export { GeminiRelay } from './relay-object'
 
 // API
 //   GET  /api/trips              所有行程的最新版本（公開，跟網站本身一樣）

@@ -1,0 +1,96 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { trips } from '../src/trips'
+import { runAgent, searchDigest, type ChatEvent } from './agent'
+import type { Env } from './env'
+import { GeminiError } from './gemini'
+
+const stored = { version: 3, updatedAt: '', summary: '', trip: trips[0] }
+
+const sse = (parts: unknown[]) =>
+  new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts } }] })}\n\n`, { headers: { 'content-type': 'text/event-stream' } })
+const busyResponse = () => Response.json({ error: { message: 'high demand' } }, { status: 503 })
+
+/** Gemini 依序回傳 geminiReplies（用完後一直回最後一個）；Tavily 與 DNS 都正常 */
+function fakeEnv(geminiReplies: (() => Response)[]) {
+  let n = 0
+  const gemini = vi.fn(async () => geminiReplies[Math.min(n++, geminiReplies.length - 1)]())
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url.includes('dns-query')) return Response.json({ Status: 0, Answer: [{ type: 1, data: '1.2.3.4' }] })
+      return Response.json({
+        answer: 'MISS 豬腳營業到 24:00',
+        results: [{ title: '미쓰족발 홍대', url: 'https://blog.example/miss', content: '미쓰족발 영업시간 24:00' }],
+      })
+    }),
+  )
+  const env = {
+    MODEL: 'main',
+    FALLBACK_MODEL: 'lite',
+    TAVILY_API_KEY: 'tvly-test',
+    GEMINI_API_KEY: 'k',
+    RELAY: { idFromName: () => ({}), get: () => ({ fetch: gemini }) },
+  } as unknown as Env
+  return { env, gemini }
+}
+
+async function run(env: Env) {
+  const events: ChatEvent[] = []
+  const done = runAgent(env, stored, [{ role: 'user', text: 'MISS 豬腳營業到幾點？' }], (e) => events.push(e))
+  // 重試之間會等幾秒，用假的計時器快轉
+  const settled = done.then(
+    () => null,
+    (e: unknown) => e,
+  )
+  await vi.runAllTimersAsync()
+  return { events, error: await settled }
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
+
+describe('runAgent 遇到模型塞車', () => {
+  it('已經搜尋過時，改給搜尋摘要，並在重試時告訴使用者', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const { env, gemini } = fakeEnv([() => sse([{ functionCall: { name: 'web_search', args: { queries: ['미쓰족발 홍대 영업시간'] } } }]), busyResponse])
+    const { events, error } = await run(env)
+    expect(error).toBeNull()
+    const text = events.filter((e) => e.type === 'text').map((e) => e.delta).join('')
+    expect(text).toContain('先給你搜尋到的重點')
+    expect(text).toContain('MISS 豬腳營業到 24:00')
+    expect(events).toContainEqual({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
+    // 第一次成功 + 兩個模型各試三次
+    expect(gemini).toHaveBeenCalledTimes(7)
+  })
+
+  it('還沒搜尋就塞車時照常回報錯誤', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const { env } = fakeEnv([busyResponse])
+    const { events, error } = await run(env)
+    expect(error).toBeInstanceOf(GeminiError)
+    expect(events.some((e) => e.type === 'text')).toBe(false)
+  })
+
+  it('塞車後重試成功就照常回答', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const { env } = fakeEnv([busyResponse, () => sse([{ text: '營業到 24:00' }])])
+    const { events, error } = await run(env)
+    expect(error).toBeNull()
+    expect(events).toContainEqual({ type: 'text', delta: '營業到 24:00' })
+  })
+})
+
+describe('searchDigest', () => {
+  it('有摘要用摘要、沒有就列前兩筆連結、失敗的標出來', () => {
+    const text = searchDigest([
+      { query: 'A 店', answer: 'A 營業到 22:00', results: [] },
+      { query: 'B 店', answer: '', results: [{ title: 'B 店官網', url: 'https://b.example', snippet: 'B 的營業時間\n是 10:00' }] },
+      { query: 'C 店', error: '沒查到' },
+    ])
+    expect(text).toContain('**A 店**\nA 營業到 22:00')
+    expect(text).toContain('- [B 店官網](https://b.example)：B 的營業時間 是 10:00')
+    expect(text).toContain('**C 店**\n這一項沒查到。')
+  })
+})

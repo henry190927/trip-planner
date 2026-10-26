@@ -30,14 +30,17 @@ const base = 'https://generativelanguage.googleapis.com/v1beta/models'
 // 免費方案的模型常塞車（503）或某些模型不開放（400 地區不支援），這幾種就換備用模型再試一次
 const retryable = (status: number, message: string) => status === 503 || status === 429 || (status === 400 && /location/i.test(message))
 
-async function call(env: Env, method: string, body: unknown, query = '') {
+// 塞車（503）通常幾秒內就會好：同一個模型等一下再試，還是不行再換下一個模型
+const BUSY_WAITS = [0, 2000, 5000]
+
+async function call(env: Env, method: string, body: unknown, query = '', onRetry?: () => void) {
   const models = [env.MODEL, env.FALLBACK_MODEL].filter(Boolean)
   let error: GeminiError | undefined
-  // 塞車（503）通常幾秒內就會好：每個模型先等一下重試一次，還是不行再換下一個模型
-  const attempts = models.flatMap((model) => [{ model, wait: 0 }, { model, wait: 1500 }])
+  const attempts = models.flatMap((model) => BUSY_WAITS.map((wait) => ({ model, wait })))
   for (const { model, wait } of attempts) {
     if (wait) {
       if (error?.status !== 503) continue
+      onRetry?.()
       await new Promise((r) => setTimeout(r, wait))
     }
     const res = await relayFetch(env, `${base}/${model}:${method}${query}`, {
@@ -65,8 +68,8 @@ interface Chunk {
 }
 
 /** 串流呼叫：每收到一段就 yield 一次 */
-export async function* streamGenerate(env: Env, body: unknown): AsyncGenerator<Chunk> {
-  const res = await call(env, 'streamGenerateContent', body, '?alt=sse')
+export async function* streamGenerate(env: Env, body: unknown, onRetry?: () => void): AsyncGenerator<Chunk> {
+  const res = await call(env, 'streamGenerateContent', body, '?alt=sse', onRetry)
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
   for (;;) {

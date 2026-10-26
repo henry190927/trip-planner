@@ -1,6 +1,6 @@
 export interface Env {
   TRIPS: KVNamespace
-  RELAY: DurableObjectNamespace<import('./relay').GeminiRelay>
+  RELAY: DurableObjectNamespace<import('./relay-object').GeminiRelay>
   GEMINI_API_KEY: string
   /** 網頁搜尋；沒設定時 AI 會說明沒辦法查 */
   TAVILY_API_KEY?: string

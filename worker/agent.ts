@@ -2,8 +2,8 @@ import { itemKinds, opsSchema } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
-import { streamGenerate, type Content, type Part } from './gemini'
-import { MAX_QUERIES, searchMany, type Source } from './search'
+import { GeminiError, streamGenerate, type Content, type Part } from './gemini'
+import { MAX_QUERIES, searchMany, type SearchResult, type Source } from './search'
 import type { Stored } from './store'
 
 // 前端看到的事件（SSE，每行 data: {json}）
@@ -128,6 +128,7 @@ function systemPrompt(trip: Trip) {
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
 - 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。要查好幾件事（例如三間店的營業時間）時，一次呼叫放多個 queries，不要一件一件查。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
+- 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
 - 回答時不要提到資料欄位名稱（例如 tentative、verify、routeId），用一般說法（「暫定」「待確認」）。
 - 你推薦但使用者還沒決定的項目設 tentative: true；沒有查證到的資訊（例如營業時間）寫進 verify。
@@ -158,21 +159,55 @@ function normalizeOps(raw: unknown) {
   })
 }
 
+/**
+ * 搜尋做完了、模型卻塞車寫不出回答時，直接把搜尋到的重點整理出來，不讓使用者只看到錯誤訊息。
+ * 這一步不需要呼叫模型。
+ */
+export function searchDigest(results: SearchResult[]) {
+  const sections = results.map((r) => {
+    if ('error' in r) return `**${r.query}**\n這一項沒查到。`
+    if (r.answer) return `**${r.query}**\n${r.answer.slice(0, 400)}`
+    const lines = r.results.slice(0, 2).map((x) => `- [${x.title || x.url}](${x.url})：${x.snippet.replace(/\s+/g, ' ').slice(0, 120)}`)
+    return `**${r.query}**\n${lines.join('\n') || '這一項沒查到。'}`
+  })
+  return [
+    '小樹現在有點塞車，沒辦法整理成完整的回答，先給你搜尋到的重點：',
+    ...sections,
+    '（這些是網頁摘要，還沒經過整理，可以點下面的來源確認；過一下再問一次，小樹會整理得更完整。）',
+  ].join('\n\n')
+}
+
+const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
+
 export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void) {
   const contents: Content[] = messages.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] }))
+  const searched: SearchResult[] = []
+  const onRetry = () => emit({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const parts: Part[] = []
-    for await (const chunk of streamGenerate(env, {
-      systemInstruction: { parts: [{ text: systemPrompt(stored.trip) }] },
-      contents,
-      tools,
-      generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
-    })) {
-      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
-        parts.push(part)
-        if (part.text && !part.thought) emit({ type: 'text', delta: part.text })
+    try {
+      for await (const chunk of streamGenerate(
+        env,
+        {
+          systemInstruction: { parts: [{ text: systemPrompt(stored.trip) }] },
+          contents,
+          tools,
+          generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
+        },
+        onRetry,
+      )) {
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          parts.push(part)
+          if (part.text && !part.thought) emit({ type: 'text', delta: part.text })
+        }
       }
+    } catch (e) {
+      // 已經回答到一半就不補；還沒開口、但手上有搜尋結果時，先把搜尋到的給使用者
+      if (!busy(e) || searched.length === 0 || parts.some((p) => p.text && !p.thought)) throw e
+      console.error('模型塞車，改給搜尋摘要', e)
+      emit({ type: 'text', delta: searchDigest(searched) })
+      return
     }
     contents.push({ role: 'model', parts })
 
@@ -194,6 +229,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           response = { error: '搜尋暫時無法使用。請告訴使用者這次沒能上網查證，憑既有知識回答的部分要標明「未查證」，或建議稍後再問。' }
         } else {
           response = { results: found.results }
+          searched.push(...found.results)
         }
       } else if (call.name === 'propose_changes') {
         const parsed = opsSchema.safeParse(normalizeOps(args.operations))

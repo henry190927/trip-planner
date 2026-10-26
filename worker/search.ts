@@ -44,6 +44,10 @@ export async function searchWeb(env: Env, query: string, signal?: AbortSignal) {
   }
 }
 
+export type SearchResult =
+  | { query: string; error: string }
+  | { query: string; answer: string; results: { title: string; url: string; snippet: string }[] }
+
 export const MAX_QUERIES = 4
 const QUERY_TIMEOUT_MS = 10_000
 
@@ -57,7 +61,7 @@ export async function searchMany(env: Env, queries: string[]) {
 
   const seen = new Set<string>()
   const sources: Source[] = []
-  const results = settled.map((r, i) => {
+  const results = settled.map((r, i): SearchResult => {
     if (r.status === 'rejected') {
       console.error('search failed', list[i], r.reason)
       return { query: list[i], error: '這一項沒查到（搜尋失敗或逾時），回答時要說明這部分未查證' }
