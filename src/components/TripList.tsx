@@ -1,18 +1,18 @@
 import { motion } from 'motion/react'
-import { ChevronRight } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { upcoming } from '../trips'
 import { useTripList } from '../lib/tripStore'
 import { href } from '../lib/router'
 import { formatDate, nowIn, tripPhase } from '../lib/time'
 import type { Trip } from '../types'
-import { Plane, Sprout, TwoFriends } from './illustrations'
+import { Plane, TripIcon, TwoFriends } from './illustrations'
 import { gradient } from './ui'
 
 function phaseText(trip: Trip) {
   const phase = tripPhase(trip, nowIn(trip.timezone).date)
   if (phase.kind === 'before') return { big: String(phase.days), small: '天後出發' }
   if (phase.kind === 'during') return { big: `Day ${phase.dayIndex + 1}`, small: '旅行中' }
-  return { big: '✓', small: '已結束' }
+  return { big: <Check className="inline size-7 align-[-0.2em]" strokeWidth={3} />, small: '已結束' }
 }
 
 export default function TripList() {
@@ -42,7 +42,7 @@ export default function TripList() {
               className={`soft-shadow relative block overflow-hidden rounded-[2rem] p-6 ${gradient}`}
             >
               <Plane className="absolute -right-2 -top-3 w-28 opacity-90" />
-              <Sprout className="absolute -bottom-3 right-14 w-24" />
+              <TripIcon icon={trip.icon} className="absolute -bottom-3 right-14 w-24" />
               <p className="text-sm font-bold text-ink/70">
                 {formatDate(trip.startDate)} – {formatDate(trip.endDate)}
               </p>
@@ -64,8 +64,9 @@ export default function TripList() {
         {upcoming.map((u) => (
           <div key={u.title} className="rounded-[2rem] border-2 border-dashed border-butter bg-cream/60 p-6">
             <p className="text-sm font-bold text-mute">{u.when}</p>
-            <h2 className="mt-1 text-2xl font-black">
-              {u.emoji} {u.title}
+            <h2 className="mt-1 flex items-center gap-1 text-2xl font-black">
+              <TripIcon icon={u.icon} className="-my-2 size-10" />
+              {u.title}
             </h2>
             <p className="text-mute">{u.subtitle}・準備中</p>
           </div>

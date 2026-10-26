@@ -9,6 +9,7 @@ import PlacesView from './PlacesView'
 import InfoView from './InfoView'
 import ChecklistView from './ChecklistView'
 import ChatSheet from './ChatSheet'
+import { TripIcon } from './illustrations'
 import ActivityBell from './ActivityBell'
 
 const nav: { tab: Tab; label: string; Icon: typeof CalendarDays }[] = [
@@ -35,7 +36,8 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
           </a>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-black leading-tight">
-              {trip.emoji} {trip.title}
+              <TripIcon icon={trip.icon} className="-my-1 mr-1 inline-block size-7 align-[-0.35em]" />
+              {trip.title}
               <span className="ml-1.5 text-sm font-bold text-mute">{trip.subtitle}</span>
             </h1>
             <p className="text-xs font-bold text-peach-ink">

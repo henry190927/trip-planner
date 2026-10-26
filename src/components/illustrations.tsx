@@ -68,6 +68,32 @@ export function Sprout({ className }: Props) {
   )
 }
 
+/** 名古屋城：屋頂兩層、屋脊上一對金鯱 */
+export function Castle({ className }: Props) {
+  return (
+    <Svg className={className}>
+      <ellipse cx="60" cy="110" rx="34" ry="5" fill={INK} opacity=".08" />
+      <g className="a-bob">
+        {/* 石垣 */}
+        <path d="M30 104 L36 84 H84 L90 104Z" fill={C.cream} {...line} />
+        <path d="M40 94 H52 M60 94 H80 M46 100 H70" {...line} strokeWidth={1.8} opacity=".5" />
+        {/* 下層 */}
+        <path d="M40 84 V68 H80 V84" fill={C.white} {...line} />
+        <path d="M28 70 Q60 60 92 70 L84 62 H36Z" fill={C.sky} {...line} />
+        {/* 上層 */}
+        <path d="M46 62 V48 H74 V62" fill={C.white} {...line} />
+        <path d="M34 50 Q60 38 86 50 L78 40 H42Z" fill={C.sky} {...line} />
+        {/* 金鯱 */}
+        <path d="M44 40 C40 34 42 28 46 30 C46 34 48 36 48 40Z" fill={C.peachCream} {...line} strokeWidth={2} />
+        <path d="M76 40 C80 34 78 28 74 30 C74 34 72 36 72 40Z" fill={C.peachCream} {...line} strokeWidth={2} />
+        <Face x={60} y={74} s={0.8} />
+      </g>
+      <Sparkle x={20} y={30} r={5} />
+      <Sparkle x={100} y={22} r={6} delay={0.8} />
+    </Svg>
+  )
+}
+
 /** 飛機：起飛日、回程日 */
 export function Plane({ className }: Props) {
   return (
@@ -276,4 +302,13 @@ const sceneArt: Record<Scene, (p: Props) => ReactNode> = {
 export function SceneArt({ scene, className }: Props & { scene: Scene }) {
   const Art = sceneArt[scene]
   return <Art className={className} />
+}
+
+/** 每趟旅行的代表插圖 */
+export const tripIcons = { sprout: Sprout, castle: Castle, plane: Plane } as const
+export type TripIconName = keyof typeof tripIcons
+
+export function TripIcon({ icon, className }: Props & { icon?: TripIconName }) {
+  const Icon = tripIcons[icon ?? 'plane']
+  return <Icon className={className} />
 }

@@ -200,7 +200,8 @@ export const tripSchema = z.object({
   id: z.string(),
   title: z.string(),
   subtitle: z.string(),
-  emoji: z.string(),
+  /** 代表插圖（不用系統 emoji，各平台長得不一樣） */
+  icon: z.enum(['sprout', 'castle', 'plane']).optional(),
   /** IANA 時區，用來判斷「現在」與倒數 */
   timezone: z.string(),
   startDate: isoDate,
