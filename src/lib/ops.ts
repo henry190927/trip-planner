@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import type { opSchema } from '../schema'
-import type { Day, Item, Trip } from '../types'
+import type { Day, Item, Spot, Trip } from '../types'
 import { formatDate } from './dates'
 import { validateTrip } from './validate'
 
@@ -50,6 +50,50 @@ const fieldNames: Record<string, string> = {
   tentative: '建議',
   verify: '待確認',
   tzLabel: '時區',
+  spotId: '地點清單',
+}
+
+const spotFieldNames: Record<string, string> = {
+  place: '名稱與地圖',
+  category: '分類',
+  area: '地區',
+  hours: '營業時間',
+  open: '營業時段',
+  closed: '公休',
+  access: '交通',
+  tags: '標籤',
+  note: '說明',
+  checkedAt: '確認日期',
+  verify: '待確認',
+}
+
+/** 用 id、名稱或當地語言名稱找地點 */
+function findSpot(trip: Trip, ref: string) {
+  const r = ref.trim()
+  return (trip.spots ?? []).find((s) => s.id === r || s.place.name === r || s.place.local === r)
+}
+
+/** 從名稱產生不重複的 id */
+function spotIdFor(trip: Trip, spot: Pick<Spot, 'place'>) {
+  const base =
+    (spot.place.name + ' ' + (spot.place.local ?? ''))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32) || 'spot'
+  const taken = new Set((trip.spots ?? []).map((s) => s.id))
+  let id = base
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`
+  return id
+}
+
+/** 新增的行程項目跟清單裡某個地點同名時，自動連結 */
+function linkSpot(trip: Trip, item: Item) {
+  if (item.spotId || !item.place) return
+  const match = (trip.spots ?? []).find(
+    (s) => s.place.name === item.place!.name || (!!s.place.local && s.place.local === item.place!.local),
+  )
+  if (match) item.spotId = match.id
 }
 
 /** 套用修改動作。不會改到傳入的 trip；有任何錯誤時 errors 不為空，trip 不可使用 */
@@ -67,6 +111,7 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           errors.push(`旅程裡沒有 ${op.date} 這一天`)
           break
         }
+        linkSpot(trip, op.item)
         day.items.push(op.item)
         changes.push({ kind: 'add', text: label(op.date, op.item), date: op.date })
         break
@@ -132,6 +177,46 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         trip.pending = before.filter((p) => p !== op.text)
         if (trip.pending.length === before.length) errors.push(`「還缺的資料」裡沒有「${op.text}」`)
         else changes.push({ kind: 'remove', text: `還缺的資料：${op.text}` })
+        break
+      }
+      case 'add_spot': {
+        const name = op.spot.place.name
+        if (findSpot(trip, name) || (op.spot.id && findSpot(trip, op.spot.id))) {
+          errors.push(`地點清單裡已經有「${name}」，要改內容請用 update_spot`)
+          break
+        }
+        const spot = { ...op.spot, id: op.spot.id ?? spotIdFor(trip, op.spot) } as Spot
+        trip.spots = [...(trip.spots ?? []), spot]
+        changes.push({ kind: 'add', text: `地點清單：${name}` })
+        break
+      }
+      case 'update_spot': {
+        const spot = findSpot(trip, op.ref) as Record<string, unknown> | undefined
+        if (!spot) {
+          errors.push(`地點清單裡找不到「${op.ref}」`)
+          break
+        }
+        for (const [key, value] of Object.entries(op.spotChanges)) {
+          if (value === null) delete spot[key]
+          else spot[key] = value
+        }
+        const fields = Object.keys(op.spotChanges).map((k) => spotFieldNames[k] ?? k)
+        changes.push({ kind: 'update', text: `地點清單：${(spot as Spot).place.name}：${fields.join('、')}` })
+        break
+      }
+      case 'remove_spot': {
+        const spot = findSpot(trip, op.ref)
+        if (!spot) {
+          errors.push(`地點清單裡找不到「${op.ref}」`)
+          break
+        }
+        const used = trip.days.flatMap((d) => d.items.filter((i) => i.spotId === spot.id).map((i) => label(d.date, i)))
+        if (used.length) {
+          errors.push(`「${spot.place.name}」還排在行程裡（${used.join('、')}），要先把那些項目刪掉或改掉`)
+          break
+        }
+        trip.spots = (trip.spots ?? []).filter((s) => s !== spot)
+        changes.push({ kind: 'remove', text: `地點清單：${spot.place.name}` })
         break
       }
     }

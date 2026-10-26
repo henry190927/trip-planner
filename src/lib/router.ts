@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 // hash 路由：GitHub Pages 這類純靜態主機不需要 rewrite 設定
-export const tabs = ['plan', 'routes', 'info', 'list'] as const
+export const tabs = ['plan', 'routes', 'places', 'info', 'list'] as const
 export type Tab = (typeof tabs)[number]
 
 export interface RouteState {

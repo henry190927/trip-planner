@@ -17,3 +17,6 @@ export type Tip = z.infer<typeof s.tipSchema>
 export type TipSection = z.infer<typeof s.tipSectionSchema>
 export type ChecklistGroup = z.infer<typeof s.checklistGroupSchema>
 export type MapProvider = Trip['mapProvider']
+export type Spot = z.infer<typeof s.spotSchema>
+export type SpotCategory = Spot['category']
+export type OpenRange = z.infer<typeof s.openRangeSchema>

@@ -215,6 +215,14 @@ function PasscodeGate() {
 export default function ChatSheet({ trip }: { trip: Trip }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
+  // 其他頁面請聊天框打開、先填好一句話
+  const draft = useChat((s) => s.draft)
+  const [handledDraft, setHandledDraft] = useState(draft?.n)
+  if (draft && draft.n !== handledDraft && draft.tripId === trip.id) {
+    setHandledDraft(draft.n)
+    setOpen(true)
+    setInput(draft.text)
+  }
   const [notice, setNotice] = useState('')
   const passcode = useChat((s) => s.passcode)
   const messages = useChat((s) => s.threads[trip.id]) ?? []

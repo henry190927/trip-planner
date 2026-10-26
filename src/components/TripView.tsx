@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { CalendarDays, ChevronLeft, Info, ListChecks, Route as RouteIcon } from 'lucide-react'
+import { CalendarDays, ChevronLeft, Info, ListChecks, MapPinned, Route as RouteIcon } from 'lucide-react'
 import type { Trip } from '../types'
 import { href, type Tab } from '../lib/router'
 import { formatDate, tripPhase, useNow } from '../lib/time'
 import DayView from './DayView'
 import RoutesView from './RoutesView'
+import PlacesView from './PlacesView'
 import InfoView from './InfoView'
 import ChecklistView from './ChecklistView'
 import ChatSheet from './ChatSheet'
@@ -13,6 +14,7 @@ import ActivityBell from './ActivityBell'
 const nav: { tab: Tab; label: string; Icon: typeof CalendarDays }[] = [
   { tab: 'plan', label: '行程', Icon: CalendarDays },
   { tab: 'routes', label: '交通', Icon: RouteIcon },
+  { tab: 'places', label: '地點', Icon: MapPinned },
   { tab: 'info', label: '資訊', Icon: Info },
   { tab: 'list', label: '清單', Icon: ListChecks },
 ]
@@ -55,6 +57,7 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
           >
             {tab === 'plan' && <DayView trip={trip} now={now} phase={phase} focus={focus} />}
             {tab === 'routes' && <RoutesView trip={trip} focus={focus} />}
+            {tab === 'places' && <PlacesView trip={trip} now={now} focus={focus} />}
             {tab === 'info' && <InfoView trip={trip} />}
             {tab === 'list' && <ChecklistView trip={trip} />}
           </motion.div>
@@ -64,7 +67,7 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
       <ChatSheet trip={trip} />
 
       <nav className="pb-safe fixed bottom-0 left-1/2 z-30 w-full max-w-(--frame) -translate-x-1/2 px-4">
-        <div className="soft-shadow mx-auto grid max-w-md grid-cols-4 rounded-[1.75rem] bg-card/90 p-1.5 backdrop-blur-xl">
+        <div className="soft-shadow mx-auto grid max-w-md grid-cols-5 rounded-[1.75rem] bg-card/90 p-1.5 backdrop-blur-xl">
           {nav.map(({ tab: t, label, Icon }) => {
             const active = t === tab
             return (

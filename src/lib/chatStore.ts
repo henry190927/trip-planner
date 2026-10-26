@@ -27,6 +27,9 @@ interface ChatState {
   /** tripId → 對話 */
   threads: Record<string, Message[]>
   busy: boolean
+  /** 其他頁面請聊天框打開並先填好一句話（例如地點卡片的「排進行程」）；n 每次加一 */
+  draft?: { tripId: string; text: string; n: number }
+  ask: (tripId: string, text: string) => void
   login: (passcode: string) => Promise<void>
   send: (tripId: string, text: string) => Promise<void>
   stop: () => void
@@ -140,6 +143,8 @@ export const useChat = create<ChatState>()(
         },
 
         clear: (tripId) => set((s) => ({ threads: { ...s.threads, [tripId]: [] } })),
+
+        ask: (tripId, text) => set((s) => ({ draft: { tripId, text, n: (s.draft?.n ?? 0) + 1 } })),
       }
     },
     {

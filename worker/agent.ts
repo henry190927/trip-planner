@@ -1,4 +1,4 @@
-import { itemKinds, opsSchema } from '../src/schema'
+import { itemKinds, opsSchema, spotCategories } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
@@ -54,6 +54,29 @@ const itemProps = {
   routeId: str('交通指南的路線 id，必須是既有的'),
   tentative: { type: 'boolean', description: '只是建議、尚未確定時為 true' },
   verify: str('出發前還要確認的事，例如「營業時間待確認」'),
+  spotId: str('對應地點清單裡的地點 id'),
+}
+const openRange = {
+  type: 'object',
+  properties: {
+    days: { type: 'array', items: { type: 'integer' }, description: '星期幾營業：0 = 星期日 … 6 = 星期六' },
+    from: str('HH:MM'),
+    to: str('HH:MM；小於等於 from 代表營業到隔天，營業到午夜寫 24:00'),
+  },
+  required: ['days', 'from', 'to'],
+}
+const spotProps = {
+  place: placeSchema,
+  category: { type: 'string', enum: [...spotCategories], description: 'food 餐廳・cafe 咖啡飲料・shopping 逛街・sight 景點・other 其他' },
+  area: str('所在地區，例如「弘大」「延南洞」'),
+  hours: str('顯示用的營業時間文字，例如「12:30–24:00（最後點餐 23:00）」；只填有可靠來源的'),
+  open: { type: 'array', items: openRange, description: '營業時段，用來判斷「現在營業中」；只填有可靠來源的' },
+  closed: str('公休日說明'),
+  access: str('怎麼去，例如「弘大入口站 9 號出口走路 3 分」'),
+  tags: { type: 'array', items: str(), description: '短標籤，例如「熱食」「宵夜」「可外帶」「雨天 OK」' },
+  note: str('補充說明'),
+  checkedAt: str('YYYY-MM-DD，營業時間等資訊是哪天查到的'),
+  verify: str('還要確認的事'),
 }
 const nullable = (schema: object) => ({ ...schema, nullable: true })
 
@@ -90,7 +113,17 @@ const tools = [
                 properties: {
                   op: {
                     type: 'string',
-                    enum: ['add_item', 'update_item', 'remove_item', 'add_checklist_item', 'add_pending', 'remove_pending'],
+                    enum: [
+                      'add_item',
+                      'update_item',
+                      'remove_item',
+                      'add_checklist_item',
+                      'add_pending',
+                      'remove_pending',
+                      'add_spot',
+                      'update_spot',
+                      'remove_spot',
+                    ],
                   },
                   date: str('YYYY-MM-DD'),
                   title: str('update_item / remove_item：目前項目的標題（要完全相同）'),
@@ -104,6 +137,13 @@ const tools = [
                   group: str('add_checklist_item：清單分組名稱'),
                   label: str('add_checklist_item：清單項目文字'),
                   text: str('add_pending / remove_pending 的文字'),
+                  spot: { type: 'object', properties: spotProps, required: ['place', 'category'], description: 'add_spot 的新地點（id 可省略）' },
+                  ref: str('update_spot / remove_spot：地點的 id、名稱或當地語言名稱'),
+                  spotChanges: {
+                    type: 'object',
+                    description: 'update_spot 要改的欄位；要刪掉某個欄位就給 null',
+                    properties: Object.fromEntries(Object.entries(spotProps).map(([k, v]) => [k, nullable(v)])),
+                  },
                 },
                 required: ['op'],
               },
@@ -135,6 +175,10 @@ function systemPrompt(trip: Trip) {
 - 時間用 HH:MM、旅程當地時間；日期用 YYYY-MM-DD，必須在旅程期間內。
 - 只屬於某位旅伴的項目才填 who；routeId 只能用既有的路線 id。
 - 排行程時考慮移動時間與兩人分頭行動的時段，不要排到時間衝突。
+- 「地點清單」（spots）收已排進行程的地點與還沒排的口袋名單。使用者丟店家連結、或說「想去但還沒決定」時，用 add_spot 加進清單，不要直接排進行程。
+- 把清單裡的地點排進行程時，行程項目的 spotId 填那個地點的 id；同一個地點的營業時間、交通等資訊寫在地點上，不要重複寫在行程項目裡。
+- 地點的營業時間（hours、open）只填有可靠來源的（官方網站、地圖 App、近期的店家資訊頁），並填 checkedAt；部落格或摘要說法不一致時寫進 verify，不要猜。
+- 推薦備案或「附近還有什麼」時，先看地點清單裡同地區、有對應標籤的地點，不夠再上網查。
 
 # 目前的行程資料（JSON）
 ${JSON.stringify(trip)}`
@@ -147,14 +191,19 @@ const stripNulls = (value: unknown): unknown =>
       ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null).map(([k, v]) => [k, stripNulls(v)]))
       : value
 
-/** 模型給的動作先整理再驗證：add_item 的 null 欄位去掉（changes 裡的 null 有意義，保留） */
-function normalizeOps(raw: unknown) {
+/** 模型給的動作先整理再驗證：新項目、新地點的 null 欄位去掉（changes、spotChanges 裡的 null 代表刪除，保留） */
+export function normalizeOps(raw: unknown) {
   if (!Array.isArray(raw)) return raw
   return raw.map((op) => {
     if (!op || typeof op !== 'object') return op
     const o = op as Record<string, unknown>
-    const kept = Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== null && v !== '' && (k !== 'changes' || o.op === 'update_item')))
+    const kept = Object.fromEntries(
+      Object.entries(o).filter(
+        ([k, v]) => v !== null && v !== '' && (k !== 'changes' || o.op === 'update_item') && (k !== 'spotChanges' || o.op === 'update_spot'),
+      ),
+    )
     if (kept.item) kept.item = stripNulls(kept.item)
+    if (kept.spot) kept.spot = stripNulls(kept.spot)
     return kept
   })
 }
