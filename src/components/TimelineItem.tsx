@@ -1,6 +1,7 @@
 import {
   BedDouble,
   Camera,
+  Lock,
   ChevronRight,
   ClipboardList,
   Plane,
@@ -14,6 +15,7 @@ import { href } from '../lib/router'
 import { Chip, MapButton, WhoChip } from './ui'
 import DriverCard from './DriverCard'
 import Alternatives, { TriggerChip } from './Alternatives'
+import { isFixed } from '../lib/plan'
 import { Bowl, Lightstick, ShoppingBag as BagArt } from './illustrations'
 
 const kinds: Record<ItemKind, { Icon: typeof Plane; bg: string }> = {
@@ -85,6 +87,12 @@ export default function TimelineItem({
           {who?.map((t) => <WhoChip key={t.id} traveler={t} />)}
           {item.tzLabel && <Chip>{item.tzLabel}時間</Chip>}
           {item.tentative && <Chip tone="warn">建議</Chip>}
+          {isFixed(item) && (
+            <Chip>
+              <Lock className="size-3" />
+              固定
+            </Chip>
+          )}
           {item.usedAlternative && (
             <span className="inline-flex items-center gap-1">
               <span className="text-[11px] font-bold text-mute">已改用備案</span>

@@ -61,6 +61,8 @@ export const itemSchema = z.object({
   verify: z.string().optional(),
   /** 對應「地點」分頁的哪一個地點 */
   spotId: z.string().optional(),
+  /** 時間不能動（班機、演唱會預設就是）；整段挪時間時不會移動它，也不會把別的項目推過它 */
+  fixed: z.boolean().optional(),
   alternatives: z.array(alternativeSchema).optional(),
   /** 目前顯示的是因為什麼情況啟用的備案；省略 = 原本的安排 */
   usedAlternative: z
@@ -237,6 +239,7 @@ const itemChangesSchema = z
     tentative: z.boolean().nullable(),
     verify: z.string().nullable(),
     spotId: z.string().nullable(),
+    fixed: z.boolean().nullable(),
   })
   .partial()
 
@@ -280,6 +283,18 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_alternative'), date: isoDate, title: z.string(), time: hhmm.optional(), alternative: alternativeSchema.omit({ original: true }) }),
   /** index：第幾個備案（從 0 開始） */
   z.object({ op: z.literal('remove_alternative'), date: isoDate, title: z.string(), time: hhmm.optional(), index: z.number().int().min(0) }),
+  /**
+   * 把 from 開始的彈性項目整段挪動 minutes 分鐘（正數往後、負數往前），固定的項目不動。
+   * 預設只挪到下一個固定行程之前；until 可以指定挪到幾點（不含）。who 只挪那位旅伴自己的項目（不含全員一起的）
+   */
+  z.object({
+    op: z.literal('shift_items'),
+    date: isoDate,
+    from: hhmm,
+    until: hhmm.optional(),
+    minutes: z.number().int().min(-240).max(240).refine((n) => n !== 0, '不能是 0'),
+    who: z.string().optional(),
+  }),
   /** 啟用備案：跟目前的內容交換 */
   z.object({ op: z.literal('use_alternative'), date: isoDate, title: z.string(), time: hhmm.optional(), index: z.number().int().min(0) }),
 ])
