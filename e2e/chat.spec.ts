@@ -106,3 +106,54 @@ test('複製回覆與整段對話：排版符號換成一般文字，附上來�
   await dialog.getByRole('button', { name: '複製整段對話' }).click()
   expect(await clipboard()).toMatch(/^我：\n推薦咖啡廳\n\n小樹：\n找到一間不錯的店/)
 })
+
+test('附圖：在手機上縮成 JPEG 才上傳，下一則訊息不重傳', async ({ page }) => {
+  const bodies: { messages: { text: string; images?: { mimeType: string; data: string }[] }[] }[] = []
+  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
+  await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
+  await page.route(`${API}/api/chat`, (r) => {
+    bodies.push(r.request().postDataJSON())
+    const events = [{ type: 'text', delta: '看到了，營業到 24:00。' }, { type: 'done' }]
+    return r.fulfill({ contentType: 'text/event-stream', body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') })
+  })
+  await page.goto(`./${trip}`)
+  await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+  const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
+
+  // 3000×1500 的 PNG：應該縮到長邊 2048 的 JPEG
+  const png = await page.evaluate(async () => {
+    const c = document.createElement('canvas')
+    c.width = 3000
+    c.height = 1500
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#97D7FF'
+    ctx.fillRect(0, 0, 3000, 1500)
+    const blob = await new Promise<Blob>((ok) => c.toBlob((b) => ok(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  })
+  await dialog.getByLabel('選擇圖片').setInputFiles({ name: 'hours.png', mimeType: 'image/png', buffer: Buffer.from(png) })
+  await expect(dialog.getByRole('img', { name: '要附的圖 1' })).toBeVisible()
+  await dialog.getByRole('button', { name: '送出' }).click()
+
+  await expect(dialog.getByText('看到了，營業到 24:00。')).toBeVisible()
+  await expect(dialog.getByRole('img', { name: '附圖 1' })).toBeVisible()
+  const sent = bodies[0].messages.at(-1)!
+  expect(sent.text).toBe('請看圖片')
+  expect(sent.images).toHaveLength(1)
+  expect(sent.images![0].mimeType).toBe('image/jpeg')
+  const size = await page.evaluate(async (data) => {
+    const img = new Image()
+    img.src = `data:image/jpeg;base64,${data}`
+    await img.decode()
+    return [img.naturalWidth, img.naturalHeight]
+  }, sent.images![0].data)
+  expect(size).toEqual([2048, 1024])
+
+  await dialog.getByRole('textbox', { name: '訊息' }).fill('那最後點餐呢？')
+  await dialog.getByRole('button', { name: '送出' }).click()
+  await expect.poll(() => bodies.length).toBe(2)
+  const second = bodies[1].messages
+  expect(second.at(-1)!.images ?? []).toHaveLength(0)
+  expect(second[0].text).toContain('當時附了 1 張圖')
+  expect(second.some((m) => m.images?.length)).toBe(false)
+})

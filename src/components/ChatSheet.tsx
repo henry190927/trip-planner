@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowUp, Check, Copy, Globe, LoaderCircle, Minus, Pencil, Plus, RotateCcw, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, RotateCcw, Square, Trash2, X } from 'lucide-react'
 import type { Trip } from '../types'
 import { API_BASE } from '../lib/api'
 import { useChat, type Message, type ProposalState } from '../lib/chatStore'
 import { Sprout, Sparkle } from './illustrations'
 import { conversationText, copyText, messageText } from '../lib/chatText'
+import { MAX_IMAGES, prepareImage, type PreparedImage } from '../lib/images'
 import RichText from './RichText'
 import { gradient } from './ui'
 
@@ -122,9 +123,16 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
     return (
       <div className="flex items-end justify-end gap-1">
         <CopyButton text={() => messageText(m)} label="複製這則訊息" className="mb-1 p-1.5" />
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-3xl rounded-br-lg bg-peach px-4 py-2.5 text-sm font-bold leading-relaxed">
-          {m.text}
-        </p>
+        <div className="flex max-w-[85%] flex-col items-end gap-1.5">
+          {m.images && m.images.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {m.images.map((src, i) => (
+                <img key={i} src={src} alt={`附圖 ${i + 1}`} className="size-20 rounded-2xl object-cover" />
+              ))}
+            </div>
+          )}
+          <p className="whitespace-pre-wrap rounded-3xl rounded-br-lg bg-peach px-4 py-2.5 text-sm font-bold leading-relaxed">{m.text}</p>
+        </div>
       </div>
     )
   return (
@@ -233,6 +241,10 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
   const clear = useChat((s) => s.clear)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [attachments, setAttachments] = useState<PreparedImage[]>([])
+  const [preparing, setPreparing] = useState(false)
+  const [attachError, setAttachError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
   const hasApplied = messages.some((m) => m.proposals?.some((p) => p.state === 'applied'))
 
   // 有新內容（訊息、串流文字、搜尋狀態、修改建議）時捲到最底
@@ -255,11 +267,30 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
 
   if (!API_BASE) return null
 
+  const attach = async (files: FileList | null) => {
+    if (!files?.length) return
+    setAttachError('')
+    const room = MAX_IMAGES - attachments.length
+    if (files.length > room) setAttachError(`一次最多附 ${MAX_IMAGES} 張圖`)
+    setPreparing(true)
+    try {
+      const ready = await Promise.all([...files].slice(0, room).map(prepareImage))
+      setAttachments((cur) => [...cur, ...ready].slice(0, MAX_IMAGES))
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : '圖片讀不出來')
+    } finally {
+      setPreparing(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   const submit = (text = input) => {
-    const t = text.trim()
-    if (!t || busy) return
+    const t = text.trim() || (attachments.length ? '請看圖片' : '')
+    if (!t || busy || preparing) return
     setInput('')
-    void send(trip.id, t)
+    setAttachments([])
+    setAttachError('')
+    void send(trip.id, t, attachments)
   }
 
   const onUndo = async () => {
@@ -365,13 +396,50 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                     ))}
                   </div>
 
+                  {(attachments.length > 0 || preparing || attachError) && (
+                    <div className="flex items-center gap-2 border-t-2 border-cream px-3 pt-2">
+                      {attachments.map((a, i) => (
+                        <div key={i} className="relative">
+                          <img src={a.thumb} alt={`要附的圖 ${i + 1}`} className="size-14 rounded-xl object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setAttachments((cur) => cur.filter((_, j) => j !== i))}
+                            aria-label={`移除第 ${i + 1} 張圖`}
+                            className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-ink text-paper"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {preparing && <LoaderCircle className="size-5 animate-spin text-mute" />}
+                      {attachError && <p className="text-xs font-bold text-peach-ink">{attachError}</p>}
+                    </div>
+                  )}
                   <form
                     onSubmit={(e) => {
                       e.preventDefault()
                       submit()
                     }}
-                    className="flex items-end gap-2 border-t-2 border-cream px-3 pb-2 pt-2"
+                    className={`flex items-end gap-2 px-3 pb-2 pt-2 ${attachments.length || preparing || attachError ? '' : 'border-t-2 border-cream'}`}
                   >
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      aria-label="選擇圖片"
+                      onChange={(e) => void attach(e.target.files)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={busy || attachments.length >= MAX_IMAGES}
+                      aria-label="附上圖片"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cream text-ink disabled:opacity-40"
+                    >
+                      <ImagePlus className="size-5" />
+                    </button>
                     <textarea
                       ref={inputRef}
                       value={input}
@@ -400,7 +468,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                       <button
                         type="submit"
                         aria-label="送出"
-                        disabled={!input.trim()}
+                        disabled={(!input.trim() && !attachments.length) || preparing}
                         className={`flex size-11 shrink-0 items-center justify-center rounded-full ${gradient} disabled:opacity-40`}
                       >
                         <ArrowUp className="size-5" strokeWidth={3} />
