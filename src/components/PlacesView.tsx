@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Clock, Coffee, Landmark, MessageCircle, ShoppingBag, Sparkles, TrainFront, UtensilsCrossed, type LucideIcon } from 'lucide-react'
+import { Clock, Coffee, Landmark, LoaderCircle, MessageCircle, Pencil, Plus, ShoppingBag, Sparkles, Trash2, TrainFront, UtensilsCrossed, type LucideIcon } from 'lucide-react'
 import type { Spot, SpotCategory, Trip } from '../types'
 import { useChat } from '../lib/chatStore'
 import { formatDate } from '../lib/dates'
@@ -9,6 +9,7 @@ import { href } from '../lib/router'
 import type { ZonedNow } from '../lib/time'
 import { Card, Chip, MapButton, Verify } from './ui'
 import { Bowl } from './illustrations'
+import SpotEditor from './SpotEditor'
 
 // 分類用線條圖示與網站的色票，不用系統 emoji（各平台長得不一樣）
 const categories: Record<SpotCategory, { label: string; Icon: LucideIcon; tint: string }> = {
@@ -53,8 +54,35 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function SpotCard({ spot, trip, slots, status, highlighted }: { spot: Spot; trip: Trip; slots: Scheduled[]; status: OpenStatus; highlighted: boolean }) {
+function SpotCard({
+  spot,
+  trip,
+  slots,
+  status,
+  highlighted,
+  onEdit,
+}: {
+  spot: Spot
+  trip: Trip
+  slots: Scheduled[]
+  status: OpenStatus
+  highlighted: boolean
+  onEdit: () => void
+}) {
   const ask = useChat((s) => s.ask)
+  const applyDirect = useChat((s) => s.applyDirect)
+  const [deleting, setDeleting] = useState<'idle' | 'confirm' | 'busy'>('idle')
+  const [error, setError] = useState('')
+  const remove = async () => {
+    setDeleting('busy')
+    setError('')
+    try {
+      await applyDirect(trip.id, [{ op: 'remove_spot', ref: spot.id }], `刪除地點：${spot.place.name}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setDeleting('idle')
+    }
+  }
   const cat = categories[spot.category]
   return (
     <Card id={`spot-${spot.id}`} className={highlighted ? 'ring-2 ring-peach' : ''}>
@@ -124,7 +152,41 @@ function SpotCard({ spot, trip, slots, status, highlighted }: { spot: Spot; trip
             請小樹排進行程
           </button>
         )}
+        <div className="ml-auto flex gap-1.5">
+          <button type="button" onClick={onEdit} aria-label={`編輯「${spot.place.name}」`} className="flex size-8 items-center justify-center rounded-full bg-cream active:scale-95">
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleting(deleting === 'confirm' ? 'idle' : 'confirm')}
+            aria-label={`刪除「${spot.place.name}」`}
+            className="flex size-8 items-center justify-center rounded-full bg-cream active:scale-95"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
       </div>
+      {deleting !== 'idle' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-2xl bg-peach/30 px-3 py-2 text-xs font-bold">
+          {deleting === 'busy' ? (
+            <span className="inline-flex items-center gap-1 text-mute">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              刪除中…
+            </span>
+          ) : (
+            <>
+              <span className="flex-1">確定從清單刪掉「{spot.place.name}」？</span>
+              <button type="button" onClick={() => void remove()} className="rounded-full bg-peach-ink px-3 py-1 text-white">
+                刪除
+              </button>
+              <button type="button" onClick={() => setDeleting('idle')} className="px-1 text-mute">
+                取消
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-2 rounded-2xl bg-peach/40 px-3 py-2 text-xs font-bold text-peach-ink">{error}</p>}
     </Card>
   )
 }
@@ -134,6 +196,13 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
   const [category, setCategory] = useState<SpotCategory>()
   const [area, setArea] = useState<string>()
   const [openOnly, setOpenOnly] = useState(false)
+  // 編輯中的地點（undefined = 新增）；n 每次打開加一，讓表單重新載入
+  const [editing, setEditing] = useState<{ spot?: Spot; n: number }>()
+  const [editorOpen, setEditorOpen] = useState(false)
+  const edit = (spot?: Spot) => {
+    setEditing({ spot, n: (editing?.n ?? 0) + 1 })
+    setEditorOpen(true)
+  }
   const spots = trip.spots ?? []
 
   useEffect(() => {
@@ -172,7 +241,7 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
 
   const renderCard = (s: Spot, i: number) => (
     <motion.div key={s.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 6) * 0.04 }}>
-      <SpotCard spot={s} trip={trip} slots={scheduled.get(s.id) ?? []} status={status(s)} highlighted={s.id === focus} />
+      <SpotCard spot={s} trip={trip} slots={scheduled.get(s.id) ?? []} status={status(s)} highlighted={s.id === focus} onEdit={() => edit(s)} />
     </motion.div>
   )
 
@@ -248,7 +317,17 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
           <MessageCircle className="size-4" />
           丟給小樹
         </button>
+        <button
+          type="button"
+          onClick={() => edit()}
+          className="ml-2 mt-3 inline-flex items-center gap-1 rounded-full bg-cream px-4 py-2 text-sm font-bold active:scale-95"
+        >
+          <Plus className="size-4" />
+          自己新增
+        </button>
       </Card>
+
+      {editing && <SpotEditor key={editing.n} trip={trip} spot={editing.spot} open={editorOpen} onClose={() => setEditorOpen(false)} />}
     </div>
   )
 }
