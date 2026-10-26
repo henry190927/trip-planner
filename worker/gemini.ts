@@ -33,7 +33,13 @@ const retryable = (status: number, message: string) => status === 503 || status 
 async function call(env: Env, method: string, body: unknown, query = '') {
   const models = [env.MODEL, env.FALLBACK_MODEL].filter(Boolean)
   let error: GeminiError | undefined
-  for (const model of models) {
+  // 塞車（503）通常幾秒內就會好：每個模型先等一下重試一次，還是不行再換下一個模型
+  const attempts = models.flatMap((model) => [{ model, wait: 0 }, { model, wait: 1500 }])
+  for (const { model, wait } of attempts) {
+    if (wait) {
+      if (error?.status !== 503) continue
+      await new Promise((r) => setTimeout(r, wait))
+    }
     const res = await relayFetch(env, `${base}/${model}:${method}${query}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
