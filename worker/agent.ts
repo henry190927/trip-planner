@@ -2,7 +2,8 @@ import { itemKinds, opsSchema } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
-import { searchWeb, streamGenerate, type Content, type Part, type Source } from './gemini'
+import { streamGenerate, type Content, type Part } from './gemini'
+import { searchWeb, type Source } from './search'
 import type { Stored } from './store'
 
 // 前端看到的事件（SSE，每行 data: {json}）
@@ -61,7 +62,7 @@ const tools = [
     functionDeclarations: [
       {
         name: 'web_search',
-        description: '用 Google 搜尋查最新資訊：營業時間、地址、交通、票價、店家推薦等。回答事實性問題前先查。',
+        description: '上網搜尋最新資訊：營業時間、地址、交通、票價、店家推薦等。回答事實性問題前先查。韓國店家用韓文店名查通常比較準；結果是網頁摘要，要自己判斷可信度與日期。',
         parameters: { type: 'object', properties: { query: str('搜尋的問題，越具體越好') }, required: ['query'] },
       },
       {
@@ -149,7 +150,6 @@ function normalizeOps(raw: unknown) {
 
 export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void) {
   const contents: Content[] = messages.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] }))
-  const today = todayIn(stored.trip.timezone)
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const parts: Part[] = []
@@ -177,9 +177,9 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
         const query = String(args.query ?? '')
         emit({ type: 'status', text: `搜尋：${query}` })
         try {
-          const result = await searchWeb(env, query, today)
+          const result = await searchWeb(env, query)
           if (result.sources.length) emit({ type: 'sources', sources: result.sources })
-          response = { result: result.text, sources: result.sources.map((s) => s.url) }
+          response = { answer: result.answer, results: result.results }
         } catch (e) {
           // 搜尋失敗不中斷對話，讓模型照實告訴使用者沒查到
           console.error('web_search failed', e)
