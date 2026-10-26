@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import type { opSchema } from '../schema'
-import type { Day, Item, Spot, Trip } from '../types'
+import type { Alternative, Day, Item, Spot, Trip } from '../types'
+import { triggerLabels } from './triggers'
 import { formatDate } from './dates'
 import { validateTrip } from './validate'
 
@@ -65,6 +66,61 @@ const spotFieldNames: Record<string, string> = {
   note: '說明',
   checkedAt: '確認日期',
   verify: '待確認',
+}
+
+// 啟用備案時跟目前內容交換的欄位；誰參加、時區等其他欄位維持不變
+const swapped = ['title', 'kind', 'time', 'end', 'place', 'spotId', 'routeId', 'note'] as const
+
+function contentOf(item: Item) {
+  const content: Partial<Alternative> = {}
+  for (const k of swapped) if (item[k] !== undefined) Object.assign(content, { [k]: item[k] })
+  return content as Pick<Alternative, (typeof swapped)[number]>
+}
+
+/** 啟用第 index 個備案：目前的內容放回備案清單的同一個位置 */
+function switchToAlternative(item: Item, index: number) {
+  const alts = item.alternatives!
+  const chosen = alts[index]
+  const used = item.usedAlternative
+  let outgoing: Alternative
+  if (used) {
+    const content: Partial<Alternative> = contentOf(item)
+    for (const k of used.inherited ?? []) delete content[k]
+    outgoing = { ...(content as Alternative), trigger: used.trigger, ...(used.when && { when: used.when }) }
+  } else {
+    outgoing = { ...contentOf(item), trigger: 'other', original: true }
+  }
+  // 備案沒寫的種類、時間沿用目前的；結束時間只在時間沒變時沿用
+  const inherited: ('kind' | 'time' | 'end')[] = []
+  const kind = chosen.kind ?? item.kind
+  if (!chosen.kind) inherited.push('kind')
+  const time = chosen.time ?? item.time
+  if (!chosen.time && item.time) inherited.push('time')
+  const end = chosen.end ?? (chosen.time ? undefined : item.end)
+  if (!chosen.end && !chosen.time && item.end) inherited.push('end')
+  for (const k of swapped) delete item[k]
+  Object.assign(item, {
+    title: chosen.title,
+    kind,
+    ...(time && { time }),
+    ...(end && { end }),
+    ...(chosen.place && { place: chosen.place }),
+    ...(chosen.spotId && { spotId: chosen.spotId }),
+    ...(chosen.routeId && { routeId: chosen.routeId }),
+    ...(chosen.note && { note: chosen.note }),
+  })
+  // 換了內容，原本的「建議」「待確認」不一定還適用
+  delete item.tentative
+  delete item.verify
+  if (chosen.original) delete item.usedAlternative
+  else
+    item.usedAlternative = {
+      trigger: chosen.trigger,
+      ...(chosen.when && { when: chosen.when }),
+      ...(inherited.length && { inherited }),
+    }
+  item.alternatives = alts.map((a, i) => (i === index ? outgoing : a))
+  return chosen
 }
 
 /** 用 id、名稱或當地語言名稱找地點 */
@@ -179,6 +235,49 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         else changes.push({ kind: 'remove', text: `還缺的資料：${op.text}` })
         break
       }
+      case 'add_alternative':
+      case 'remove_alternative':
+      case 'use_alternative': {
+        const day = dayOf(op.date)
+        if (!day) {
+          errors.push(`旅程裡沒有 ${op.date} 這一天`)
+          break
+        }
+        const found = findItem(day, op.title, op.time)
+        if ('error' in found) {
+          errors.push(found.error!)
+          break
+        }
+        const item = day.items[found.index!]
+        const before = label(op.date, item)
+        if (op.op === 'add_alternative') {
+          item.alternatives = [...(item.alternatives ?? []), op.alternative]
+          changes.push({ kind: 'add', text: `${before} 的備案（${triggerLabels[op.alternative.trigger]}）：${op.alternative.title}`, date: op.date })
+          break
+        }
+        const alt = item.alternatives?.[op.index]
+        if (!alt) {
+          errors.push(`${before} 沒有第 ${op.index + 1} 個備案（共 ${item.alternatives?.length ?? 0} 個）`)
+          break
+        }
+        if (op.op === 'remove_alternative') {
+          if (alt.original) {
+            errors.push(`${before} 的「原本的安排」不能刪，要先換回來`)
+            break
+          }
+          item.alternatives = item.alternatives!.filter((_, i) => i !== op.index)
+          if (item.alternatives.length === 0) delete item.alternatives
+          changes.push({ kind: 'remove', text: `${before} 的備案（${triggerLabels[alt.trigger]}）：${alt.title}`, date: op.date })
+          break
+        }
+        const chosen = switchToAlternative(item, op.index)
+        changes.push({
+          kind: 'update',
+          text: chosen.original ? `${before} 換回原本的安排：「${chosen.title}」` : `${before} 改用備案（${triggerLabels[chosen.trigger]}）：「${chosen.title}」`,
+          date: op.date,
+        })
+        break
+      }
       case 'add_spot': {
         const name = op.spot.place.name
         if (findSpot(trip, name) || (op.spot.id && findSpot(trip, op.spot.id))) {
@@ -213,6 +312,13 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         const used = trip.days.flatMap((d) => d.items.filter((i) => i.spotId === spot.id).map((i) => label(d.date, i)))
         if (used.length) {
           errors.push(`「${spot.place.name}」還排在行程裡（${used.join('、')}），要先把那些項目刪掉或改掉`)
+          break
+        }
+        const backups = trip.days.flatMap((d) =>
+          d.items.filter((i) => i.alternatives?.some((a) => a.spotId === spot.id)).map((i) => label(d.date, i)),
+        )
+        if (backups.length) {
+          errors.push(`「${spot.place.name}」是其他項目的備案（${backups.join('、')}），要先把那些備案刪掉`)
           break
         }
         trip.spots = (trip.spots ?? []).filter((s) => s !== spot)

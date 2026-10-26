@@ -9,10 +9,11 @@ import {
   TrainFront,
   UtensilsCrossed,
 } from 'lucide-react'
-import type { Item, ItemKind, Trip } from '../types'
+import type { Item, ItemKind, Trigger, Trip } from '../types'
 import { href } from '../lib/router'
 import { Chip, MapButton, WhoChip } from './ui'
 import DriverCard from './DriverCard'
+import Alternatives, { TriggerChip } from './Alternatives'
 import { Bowl, Lightstick, ShoppingBag as BagArt } from './illustrations'
 
 const kinds: Record<ItemKind, { Icon: typeof Plane; bg: string }> = {
@@ -38,18 +39,24 @@ export default function TimelineItem({
   trip,
   last,
   state,
+  date,
+  scenario,
 }: {
   item: Item
   trip: Trip
   last: boolean
   state?: 'now' | 'next'
+  date: string
+  /** 選了「遇到狀況」時：沒有對應備案的項目淡化 */
+  scenario?: Trigger
 }) {
+  const dimmed = scenario && !item.alternatives?.some((a) => a.trigger === scenario && !a.original)
   const { Icon, bg } = kinds[item.kind]
   const Art = item.tentative ? undefined : accentArt[item.kind]
   const who = item.who?.map((id) => trip.travelers.find((t) => t.id === id)).filter((t) => t !== undefined)
 
   return (
-    <li className="relative flex gap-3">
+    <li className={`relative flex gap-3 transition-opacity ${dimmed ? 'opacity-40' : ''}`} data-scenario-match={scenario && !dimmed ? '' : undefined}>
       <div className="w-12 shrink-0 pt-3.5 text-right">
         <p className="text-sm font-black tabular-nums">{item.time ?? ''}</p>
         {item.end && <p className="text-[11px] font-bold tabular-nums text-mute">{item.end}</p>}
@@ -78,6 +85,12 @@ export default function TimelineItem({
           {who?.map((t) => <WhoChip key={t.id} traveler={t} />)}
           {item.tzLabel && <Chip>{item.tzLabel}時間</Chip>}
           {item.tentative && <Chip tone="warn">建議</Chip>}
+          {item.usedAlternative && (
+            <span className="inline-flex items-center gap-1">
+              <span className="text-[11px] font-bold text-mute">已改用備案</span>
+              <TriggerChip trigger={item.usedAlternative.trigger} when={item.usedAlternative.when} />
+            </span>
+          )}
         </div>
         <h3 className={`mt-1 font-extrabold leading-snug ${Art ? 'pr-14' : ''}`}>{item.title}</h3>
         {item.place?.local && <p className="text-xs font-bold text-mute">{item.place.local}</p>}
@@ -99,6 +112,7 @@ export default function TimelineItem({
             )}
           </div>
         )}
+        <Alternatives item={item} date={date} trip={trip} scenario={scenario} />
       </div>
     </li>
   )

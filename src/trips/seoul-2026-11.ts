@@ -306,6 +306,15 @@ export const seoul2026: Trip = {
           title: '午餐・韓牛燒肉「朝鮮火爐烤肉」',
           place: joseonHwaro,
           spotId: 'joseon-hwaro',
+          alternatives: [
+            {
+              trigger: 'full',
+              title: '午餐・改吃「一片里肌」',
+              spotId: 'ilpyeon-deungsim',
+              place: { name: '一片里肌 弘大總店', local: '일편등심 홍대본점', mapQuery: '일편등심 홍대본점' },
+              note: '同一區的韓牛燒肉，在地點清單的口袋名單裡。',
+            },
+          ],
         },
         {
           time: '13:00',
@@ -349,6 +358,22 @@ export const seoul2026: Trip = {
           title: '自由時間：京義線林蔭道・望遠市場',
           place: mangwon,
           spotId: 'mangwon-market',
+          alternatives: [
+            {
+              trigger: 'rain',
+              title: '自由時間：逛 AK& 弘大',
+              kind: 'shopping',
+              place: { name: 'AK& 弘大', local: 'AK& 홍대', mapQuery: 'AK& 홍대' },
+              note: '弘大入口站旁的購物中心，下雨也能逛。',
+            },
+            {
+              trigger: 'tired',
+              title: '回住宿休息',
+              kind: 'stay',
+              place: stay,
+              note: '晚上還要去接她，先充電。',
+            },
+          ],
           note: '都在住宿附近，逛累了隨時能回去。晚上要吃豬腳，下午別吃太飽。',
           tentative: true,
         },
@@ -398,6 +423,20 @@ export const seoul2026: Trip = {
           title: 'MISS 豬腳宵夜',
           place: jokbal,
           spotId: 'miss-jokbal',
+          alternatives: [
+            {
+              trigger: 'full',
+              title: '外帶 MISS 豬腳回住宿吃',
+              note: '豬腳在韓國很常外帶，可以問店員「포장 돼요?」（可以外帶嗎？）',
+            },
+            {
+              trigger: 'late',
+              when: '散場太晚、店快打烊',
+              title: '便利商店買宵夜回住宿',
+              place: stay,
+              note: '弘大一帶便利商店很多，買點吃的回去慶祝也很好。',
+            },
+          ],
           note: '慶祝兩場都看完！吃完回去收行李、秤重，明天 06:45 起床。',
           verify: '營業時間與最後點餐時間在 Naver Map 確認；太晚沒開就改到中午吃',
         },

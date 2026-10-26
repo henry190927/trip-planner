@@ -20,3 +20,5 @@ export type MapProvider = Trip['mapProvider']
 export type Spot = z.infer<typeof s.spotSchema>
 export type SpotCategory = Spot['category']
 export type OpenRange = z.infer<typeof s.openRangeSchema>
+export type Alternative = z.infer<typeof s.alternativeSchema>
+export type Trigger = Alternative['trigger']

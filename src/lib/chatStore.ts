@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { safeStorage, usePrefs } from './store'
-import { ApiError, applyProposal, chat, checkPasscode, undoLast, type Proposal, type Source } from './api'
+import { ApiError, applyManual, applyProposal, chat, checkPasscode, undoLast, type Proposal, type Source } from './api'
 import { useTrips } from './tripStore'
 
 export interface ProposalState {
@@ -30,6 +30,8 @@ interface ChatState {
   /** 其他頁面請聊天框打開並先填好一句話（例如地點卡片的「排進行程」）；n 每次加一 */
   draft?: { tripId: string; text: string; n: number }
   ask: (tripId: string, text: string) => void
+  /** 在畫面上直接改（不經過小樹），例如啟用備案；需要通關密語 */
+  applyDirect: (tripId: string, ops: unknown[], summary: string) => Promise<void>
   login: (passcode: string) => Promise<void>
   send: (tripId: string, text: string) => Promise<void>
   stop: () => void
@@ -143,6 +145,19 @@ export const useChat = create<ChatState>()(
         },
 
         clear: (tripId) => set((s) => ({ threads: { ...s.threads, [tripId]: [] } })),
+
+        applyDirect: async (tripId, ops, summary) => {
+          const { passcode } = get()
+          if (!passcode) throw new Error('要先在小樹那邊輸入通關密語')
+          try {
+            const result = await applyManual(passcode, tripId, ops, summary)
+            useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
+            usePrefs.getState().markSeen(tripId, result.version)
+          } catch (e) {
+            if (e instanceof ApiError && e.status === 401) set({ passcode: undefined })
+            throw new Error(errorText(e), { cause: e })
+          }
+        },
 
         ask: (tripId, text) => set((s) => ({ draft: { tripId, text, n: (s.draft?.n ?? 0) + 1 } })),
       }

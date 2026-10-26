@@ -20,8 +20,8 @@ export interface Stored {
 export interface LogEntry {
   version: number
   at: string
-  /** ai：小樹提的修改被套用；undo：復原；sync：從程式碼同步 */
-  source: 'ai' | 'undo' | 'sync'
+  /** ai：小樹提的修改被套用；manual：在畫面上直接操作（例如啟用備案）；undo：復原；sync：從程式碼同步 */
+  source: 'ai' | 'manual' | 'undo' | 'sync'
   summary: string
   changes: Change[]
 }

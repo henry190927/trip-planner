@@ -14,10 +14,11 @@ import { Sprout } from './illustrations'
 
 const noLog: LogEntry[] = []
 
-const sources: Record<LogEntry['source'], { label: string; tone: 'peach' | 'mute' | 'sky' }> = {
+const sources: Record<LogEntry['source'], { label: string; tone: 'peach' | 'mute' | 'sky' | 'warn' }> = {
   ai: { label: '小樹的修改', tone: 'peach' },
+  manual: { label: '手動切換', tone: 'sky' },
   undo: { label: '復原', tone: 'mute' },
-  sync: { label: '同步更新', tone: 'sky' },
+  sync: { label: '同步更新', tone: 'warn' },
 }
 
 const kinds: Record<Change['kind'], { Icon: typeof Plus; className: string; label: string }> = {
