@@ -66,7 +66,11 @@ function geminiMessage(e: unknown) {
 }
 
 async function chat(req: Request, env: Env, cors: Record<string, string>) {
-  const body = (await req.json().catch(() => null)) as { tripId?: string; messages?: (ChatMessage & { images?: ChatImage[] })[] } | null
+  const body = (await req.json().catch(() => null)) as {
+    tripId?: string
+    viewer?: string
+    messages?: (ChatMessage & { images?: ChatImage[] })[]
+  } | null
   const stored = body?.tripId ? await loadTrip(env, body.tripId) : undefined
   if (!stored) return json({ error: '找不到這個行程' }, 404, cors)
   const messages: ChatMessage[] = (body?.messages ?? [])
@@ -90,7 +94,9 @@ async function chat(req: Request, env: Env, cors: Record<string, string>) {
 
   const work = (async () => {
     try {
-      await runAgent(env, stored, messages, emit)
+      // 只認得行程裡的旅伴 id
+      const viewer = stored.trip.travelers.some((t) => t.id === body?.viewer) ? body!.viewer : undefined
+      await runAgent(env, stored, messages, emit, viewer)
     } catch (e) {
       console.error(e)
       emit({ type: 'error', text: geminiMessage(e) })

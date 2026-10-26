@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { AnimatePresence, motion, type PanInfo } from 'motion/react'
-import type { Item, Trigger, Trip } from '../types'
+import type { Trigger, Trip } from '../types'
 import { triggers } from '../schema'
 import { triggerLabels } from '../lib/triggers'
 import { triggerIcons } from './Alternatives'
 import { formatDate, weekday, type TripPhase, type ZonedNow } from '../lib/time'
 import { usePrefs } from '../lib/store'
+import { canSee } from '../lib/visibility'
 import TimelineItem from './TimelineItem'
 import { SceneArt } from './illustrations'
 import { gradient } from './ui'
 
 const swipe = { distance: 60, velocity: 400 }
 
-const visibleTo = (item: Item, viewer?: string) => !viewer || !item.who || item.who.includes(viewer)
 
 function WhoFilter({ trip }: { trip: Trip }) {
   const viewer = usePrefs((s) => s.viewer[trip.id])
@@ -66,7 +66,7 @@ export default function DayView({ trip, now, phase, focus }: { trip: Trip; now: 
   }
   const viewer = usePrefs((s) => s.viewer[trip.id])
   const day = trip.days[index]
-  const items = day.items.filter((item) => visibleTo(item, viewer))
+  const items = day.items.filter((item) => canSee(item, viewer))
   // 「遇到狀況？」：這一天有哪些情況有備案；換一天就清掉
   const [scenario, setScenario] = useState<Trigger>()
   const [scenarioDay, setScenarioDay] = useState(day.date)

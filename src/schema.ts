@@ -63,6 +63,12 @@ export const itemSchema = z.object({
   spotId: z.string().optional(),
   /** 時間不能動（班機、演唱會預設就是）；整段挪時間時不會移動它，也不會把別的項目推過它 */
   fixed: z.boolean().optional(),
+  /** 小任務：有這個欄位就是可以打勾的待辦；time–end 是可以做的時間範圍，who 是負責人 */
+  todo: z.object({ done: z.boolean(), doneAt: z.string().optional() }).optional(),
+  /** 這件事是為了哪個行程（例如外帶豬腳 → 回住宿吃宵夜） */
+  for: z.object({ time: hhmm.optional(), title: z.string() }).optional(),
+  /** 私人（驚喜用）：只有負責人選自己的視角時才看得到，修改紀錄也不寫內容 */
+  private: z.boolean().optional(),
   alternatives: z.array(alternativeSchema).optional(),
   /** 目前顯示的是因為什麼情況啟用的備案；省略 = 原本的安排 */
   usedAlternative: z
@@ -241,6 +247,9 @@ const itemChangesSchema = z
     verify: z.string().nullable(),
     spotId: z.string().nullable(),
     fixed: z.boolean().nullable(),
+    todo: z.object({ done: z.boolean(), doneAt: z.string().optional() }).nullable(),
+    for: z.object({ time: hhmm.optional(), title: z.string() }).nullable(),
+    private: z.boolean().nullable(),
   })
   .partial()
 
@@ -296,6 +305,8 @@ export const opSchema = z.discriminatedUnion('op', [
     minutes: z.number().int().min(-240).max(240).refine((n) => n !== 0, '不能是 0'),
     who: z.string().optional(),
   }),
+  /** 小任務打勾或取消 */
+  z.object({ op: z.literal('complete_task'), date: isoDate, title: z.string(), time: hhmm.optional(), done: z.boolean() }),
   /** 啟用備案：跟目前的內容交換 */
   z.object({ op: z.literal('use_alternative'), date: isoDate, title: z.string(), time: hhmm.optional(), index: z.number().int().min(0) }),
 ])

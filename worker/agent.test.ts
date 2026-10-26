@@ -138,3 +138,30 @@ describe('模型冷卻', () => {
     expect(gemini.mock.calls.map(modelOf)).toEqual(['main'])
   })
 })
+
+describe('私人小任務不給小樹看', () => {
+  it('不是負責人時，送給模型的行程資料裡沒有私人小任務', async () => {
+    const { applyOps } = await import('../src/lib/ops')
+    const trip = applyOps(trips[0], [
+      {
+        op: 'add_item',
+        date: '2026-11-07',
+        item: { time: '19:00', kind: 'task', title: '偷偷外帶豬腳', who: ['me'], todo: { done: false }, private: true },
+      },
+    ]).trip
+    const bodies: string[] = []
+    const { env, gemini } = fakeEnv([() => sse([{ text: '好' }])])
+    gemini.mockImplementation(async (req: Request) => {
+      bodies.push(await req.text())
+      return sse([{ text: '好' }])
+    })
+    const ask = (viewer?: string) => runAgent(env, { ...stored, trip }, [{ role: 'user', text: '明天有什麼？' }], () => {}, viewer)
+    await ask('her')
+    await ask(undefined)
+    await ask('me')
+    expect(bodies[0]).not.toContain('偷偷外帶豬腳')
+    expect(bodies[1]).not.toContain('偷偷外帶豬腳')
+    expect(bodies[2]).toContain('偷偷外帶豬腳')
+    expect(bodies[0]).toContain('現在用這支手機的是：「她」')
+  })
+})
