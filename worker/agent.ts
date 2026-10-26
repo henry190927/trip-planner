@@ -3,7 +3,7 @@ import { applyOps, type Change, type Op } from '../src/lib/ops'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
 import { streamGenerate, type Content, type Part } from './gemini'
-import { searchWeb, type Source } from './search'
+import { MAX_QUERIES, searchMany, type Source } from './search'
 import type { Stored } from './store'
 
 // 前端看到的事件（SSE，每行 data: {json}）
@@ -63,7 +63,17 @@ const tools = [
       {
         name: 'web_search',
         description: '上網搜尋最新資訊：營業時間、地址、交通、票價、店家推薦等。回答事實性問題前先查。韓國店家用韓文店名查通常比較準；結果是網頁摘要，要自己判斷可信度與日期。',
-        parameters: { type: 'object', properties: { query: str('搜尋的問題，越具體越好') }, required: ['query'] },
+        parameters: {
+          type: 'object',
+          properties: {
+            queries: {
+              type: 'array',
+              items: { type: 'string' },
+              description: `要查的問題，每項一件事、越具體越好；要查好幾件事時全部放在同一次呼叫，會同時搜尋（最多 ${MAX_QUERIES} 項）`,
+            },
+          },
+          required: ['queries'],
+        },
       },
       {
         name: 'propose_changes',
@@ -116,7 +126,7 @@ function systemPrompt(trip: Trip) {
 # 規則
 - 一律用繁體中文（台灣用語）回答，口氣親切、簡潔，手機上好讀；不要用表格。
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
-- 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。
+- 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。要查好幾件事（例如三間店的營業時間）時，一次呼叫放多個 queries，不要一件一件查。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
 - 回答時不要提到資料欄位名稱（例如 tentative、verify、routeId），用一般說法（「暫定」「待確認」）。
@@ -174,17 +184,16 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       const args = call.args ?? {}
       let response: Record<string, unknown>
       if (call.name === 'web_search') {
-        const query = String(args.query ?? '')
-        emit({ type: 'status', text: `搜尋：${query}` })
-        try {
-          const result = await searchWeb(env, query)
-          if (result.sources.length) emit({ type: 'sources', sources: result.sources })
-          response = { answer: result.answer, results: result.results }
-        } catch (e) {
-          // 搜尋失敗不中斷對話，讓模型照實告訴使用者沒查到
-          console.error('web_search failed', e)
+        const raw = Array.isArray(args.queries) ? args.queries : [args.query]
+        const queries = raw.filter((q): q is string => typeof q === 'string')
+        emit({ type: 'status', text: `搜尋：${queries.slice(0, MAX_QUERIES).join('、')}` })
+        const found = await searchMany(env, queries)
+        if (found.sources.length) emit({ type: 'sources', sources: found.sources })
+        if (found.failed === found.results.length) {
           emit({ type: 'status', text: '搜尋暫時不能用' })
           response = { error: '搜尋暫時無法使用。請告訴使用者這次沒能上網查證，憑既有知識回答的部分要標明「未查證」，或建議稍後再問。' }
+        } else {
+          response = { results: found.results }
         }
       } else if (call.name === 'propose_changes') {
         const parsed = opsSchema.safeParse(normalizeOps(args.operations))
