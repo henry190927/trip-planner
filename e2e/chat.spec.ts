@@ -45,7 +45,7 @@ test('通關密語 → 聊天 → 套用修改 → 行程上看得到', async ({
   await dialog.getByPlaceholder('通關密語').fill('letmein')
   await dialog.getByRole('button', { name: '開始聊天' }).click()
 
-  await expect(dialog.getByText('嗨！我是小芽')).toBeVisible()
+  await expect(dialog.getByText('嗨！我是小樹')).toBeVisible()
   await dialog.getByRole('textbox', { name: '訊息' }).fill('11/7 早上加一間咖啡廳')
   await dialog.getByRole('button', { name: '送出' }).click()
 
