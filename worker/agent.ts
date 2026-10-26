@@ -1,5 +1,6 @@
 import { itemKinds, opsSchema, spotCategories, triggers } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
+import { freeWindows } from '../src/lib/plan'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
 import { GeminiError, streamGenerate, type Content, type Part } from './gemini'
@@ -62,6 +63,7 @@ const itemProps = {
   tentative: { type: 'boolean', description: '只是建議、尚未確定時為 true' },
   verify: str('出發前還要確認的事，例如「營業時間待確認」'),
   spotId: str('對應地點清單裡的地點 id'),
+  fixed: { type: 'boolean', description: '時間不能動的行程（班機、演唱會預設就是）' },
 }
 const openRange = {
   type: 'object',
@@ -118,6 +120,20 @@ const tools = [
         },
       },
       {
+        name: 'find_free_time',
+        description:
+          '算出某一天在固定行程（班機、演唱會、標了固定的項目）之間的空檔，以及空檔裡目前排了哪些彈性項目。要回答「有多少時間」「早到了可以做什麼」「來不來得及」時先用它，不要自己算時間。',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: str('YYYY-MM-DD'),
+            who: str('只看某位旅伴的行程時填旅伴 id'),
+            after: str('HH:MM，從這個時間開始算（例如現在幾點）'),
+          },
+          required: ['date'],
+        },
+      },
+      {
         name: 'propose_changes',
         description:
           '提出行程修改。不會立刻生效：會顯示給使用者看，使用者按「套用」才寫入。一次可以包含多個動作。',
@@ -145,6 +161,7 @@ const tools = [
                       'add_alternative',
                       'remove_alternative',
                       'use_alternative',
+                      'shift_items',
                     ],
                   },
                   date: str('YYYY-MM-DD'),
@@ -152,6 +169,10 @@ const tools = [
                   time: str('update_item / remove_item / *_alternative：同一天有同名項目時用目前的時間區分'),
                   alternative: { type: 'object', properties: alternativeProps, required: ['trigger', 'title'], description: 'add_alternative 的備案' },
                   index: { type: 'integer', description: 'remove_alternative / use_alternative：第幾個備案（從 0 開始）' },
+                  from: str('shift_items：從幾點開始挪（HH:MM，含）'),
+                  until: str('shift_items：挪到幾點為止（不含）；省略 = 下一個固定行程之前'),
+                  minutes: { type: 'integer', description: 'shift_items：挪幾分鐘，正數往後延、負數提前' },
+                  who: str('shift_items：只挪某位旅伴自己的項目時填旅伴 id'),
                   item: { type: 'object', properties: itemProps, required: ['kind', 'title'], description: 'add_item 的新項目' },
                   changes: {
                     type: 'object',
@@ -207,6 +228,8 @@ function systemPrompt(trip: Trip) {
 - 推薦備案或「附近還有什麼」時，先看地點清單裡同地區、有對應標籤的地點，不夠再上網查。
 - 備案（alternatives）掛在行程項目上，寫清楚什麼情況（trigger）改成做什麼。排有風險的項目時（熱門店可能客滿、戶外行程怕下雨、時間很趕），可以順便提議 1–2 個備案；備案的地點最好在同一區，時間跟原本一樣就不要填 time。
 - 使用者說遇到狀況（「客滿了」「下雨了」「早到了」）時，先看那個項目有沒有對應的備案；有的話建議用 use_alternative 直接換，沒有再找新的。
+- 固定行程（班機、演唱會、fixed 為 true 的項目）時間不能動。行程有延誤或提早時，用 shift_items 把彈性項目整段挪動，預設只挪到下一個固定行程之前；挪不動（會撞到固定行程）時，改建議刪掉或縮短某個彈性項目，或改用備案。
+- 算空檔、來不來得及時先呼叫 find_free_time，不要自己做時間加減。
 - 項目的 usedAlternative 代表目前用的是備案；備案清單裡 original 為 true 的是原本的安排，換回去也是 use_alternative。
 
 # 目前的行程資料（JSON）
@@ -313,6 +336,17 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           response = { results: found.results }
           searched.push(...found.results)
         }
+      } else if (call.name === 'find_free_time') {
+        const day = stored.trip.days.find((d) => d.date === args.date)
+        emit({ type: 'status', text: '計算空檔…' })
+        response = day
+          ? {
+              windows: freeWindows(day, {
+                who: typeof args.who === 'string' ? args.who : undefined,
+                after: typeof args.after === 'string' && /^\d{2}:\d{2}$/.test(args.after) ? args.after : undefined,
+              }),
+            }
+          : { error: `旅程裡沒有 ${String(args.date)} 這一天` }
       } else if (call.name === 'propose_changes') {
         const parsed = opsSchema.safeParse(normalizeOps(args.operations))
         if (!parsed.success) {

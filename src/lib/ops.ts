@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import type { opSchema } from '../schema'
 import type { Alternative, Day, Item, Spot, Trip } from '../types'
 import { triggerLabels } from './triggers'
+import { shiftItems } from './plan'
 import { formatDate } from './dates'
 import { validateTrip } from './validate'
 
@@ -52,6 +53,7 @@ const fieldNames: Record<string, string> = {
   verify: '待確認',
   tzLabel: '時區',
   spotId: '地點清單',
+  fixed: '固定',
 }
 
 const spotFieldNames: Record<string, string> = {
@@ -276,6 +278,27 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           text: chosen.original ? `${before} 換回原本的安排：「${chosen.title}」` : `${before} 改用備案（${triggerLabels[chosen.trigger]}）：「${chosen.title}」`,
           date: op.date,
         })
+        break
+      }
+      case 'shift_items': {
+        const day = dayOf(op.date)
+        if (!day) {
+          errors.push(`旅程裡沒有 ${op.date} 這一天`)
+          break
+        }
+        const { moved, until, errors: shiftErrors } = shiftItems(day, op.from, op.minutes, { who: op.who, until: op.until })
+        if (shiftErrors.length) {
+          errors.push(...shiftErrors)
+          break
+        }
+        if (moved === 0) {
+          errors.push(`${formatDate(op.date, false)} ${op.from} 之後沒有可以挪的彈性項目`)
+          break
+        }
+        const who = op.who ? trip.travelers.find((t) => t.id === op.who)?.name : undefined
+        const amount = `${op.minutes > 0 ? '往後延' : '提前'} ${Math.abs(op.minutes)} 分`
+        const range = until ? `${op.from}–${until} ` : `${op.from} 之後`
+        changes.push({ kind: 'update', text: `${formatDate(op.date, false)} ${range}${who ? `「${who}」` : ''}的彈性行程${amount}（${moved} 項）`, date: op.date })
         break
       }
       case 'add_spot': {

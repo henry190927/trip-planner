@@ -7,6 +7,9 @@ import { useChat, type Message, type ProposalState } from '../lib/chatStore'
 import { Sprout, Sparkle } from './illustrations'
 import { conversationText, copyText, messageText } from '../lib/chatText'
 import { MAX_IMAGES, prepareImage, type PreparedImage } from '../lib/images'
+import { quickActions } from '../lib/quickActions'
+import { usePrefs } from '../lib/store'
+import { useNow } from '../lib/time'
 import RichText from './RichText'
 import { gradient } from './ui'
 
@@ -15,6 +18,7 @@ const suggestions = [
   'MISS 豬腳營業到幾點？',
   '11/6 取票前，KBS Arena 附近有什麼可以快速吃的？',
   '首爾 11 月初的天氣要怎麼穿？',
+  '11/7 午餐晚了 30 分，幫我調整後面的行程',
 ]
 
 function MiniSprout({ className = 'size-9' }: { className?: string }) {
@@ -241,6 +245,9 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
   const clear = useChat((s) => s.clear)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const now = useNow(trip.timezone)
+  const viewer = usePrefs((s) => s.viewer[trip.id])
+  const actions = quickActions(trip, now, viewer)
   const [attachments, setAttachments] = useState<PreparedImage[]>([])
   const [preparing, setPreparing] = useState(false)
   const [attachError, setAttachError] = useState('')
@@ -254,6 +261,15 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     if (!open || !contentKey) return
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
   }, [open, contentKey])
+
+  // 輸入框跟著內容長高：打字、快捷按鈕或其他頁面填進來的文字都一樣
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el || !open) return
+    el.style.height = 'auto'
+    // 清空時回到原本的高度
+    el.style.height = input ? `${Math.min(el.scrollHeight, 120)}px` : ''
+  }, [input, open])
 
   // 開著聊天框時不讓背後的頁面跟著捲
   useEffect(() => {
@@ -396,6 +412,23 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                     ))}
                   </div>
 
+                  {actions.length > 0 && !busy && (
+                    <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-t-2 border-cream px-3 pt-2" aria-label="旅行中的快捷按鈕">
+                      {actions.map((a) => (
+                        <button
+                          key={a.label}
+                          type="button"
+                          onClick={() => {
+                            setInput(a.text)
+                            inputRef.current?.focus()
+                          }}
+                          className="shrink-0 rounded-full bg-cream px-3 py-1.5 text-xs font-extrabold active:scale-95"
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {(attachments.length > 0 || preparing || attachError) && (
                     <div className="flex items-center gap-2 border-t-2 border-cream px-3 pt-2">
                       {attachments.map((a, i) => (
@@ -444,11 +477,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                       ref={inputRef}
                       value={input}
                       rows={1}
-                      onChange={(e) => {
-                        setInput(e.target.value)
-                        e.target.style.height = 'auto'
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
-                      }}
+                      onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => {
                         // 中文輸入法選字時的 Enter 不送出
                         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
