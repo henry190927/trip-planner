@@ -29,7 +29,7 @@ flowchart LR
     worker --> dns
   end
 
-  gemini["Gemini<br/>3.6 Flash → 3.1 Flash-Lite"]
+  gemini["Gemini<br/>3.6 Flash → 備用的 Flash-Lite"]
   tavily["Tavily<br/>網頁搜尋"]
 
   app -- "讀行程（公開）" --> worker
@@ -145,7 +145,7 @@ flowchart TD
 | 限制 | 對策 |
 |---|---|
 | Gemini 不支援香港，而從台灣連線常被分到 Cloudflare 香港機房 | 對 Gemini 的請求都經過固定在美西的 Durable Object 轉發（`worker/relay.ts`） |
-| 每個模型每天只有 20 次請求，常塞車（503） | 主模型 3.6 Flash；503 先等 1.5 秒重試，再改用 3.1 Flash-Lite（額度分開算） |
+| 每個模型每天只有 20 次請求，常塞車（503） | 主模型 3.6 Flash；503 先等 2 秒重試一次，再依序改用幾個 Flash-Lite（每個模型的額度分開算，見 `wrangler.jsonc` 的 `FALLBACK_MODELS`） |
 | Gemini 內建的 Google 搜尋在免費方案沒有額度 | 改用 Tavily（每月 1,000 次）；結果直接交給模型讀，不多用 Gemini 額度 |
 | 一次要查好幾件事 | 同一次呼叫最多 4 項同時搜尋，各自逾時，部分失敗也會標出來 |
 

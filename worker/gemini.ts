@@ -27,14 +27,29 @@ export class GeminiError extends Error {
 
 const base = 'https://generativelanguage.googleapis.com/v1beta/models'
 
-// 免費方案的模型常塞車（503）或某些模型不開放（400 地區不支援），這幾種就換備用模型再試一次
-const retryable = (status: number, message: string) => status === 503 || status === 429 || (status === 400 && /location/i.test(message))
+// 免費方案的模型常塞車（503）、額度用完（429），或某些模型對這把金鑰不開放（400 地區不支援、404 不再提供），
+// 這幾種就換下一個模型。每個模型的每日額度分開算，多備幾個等於多幾份額度
+const retryable = (status: number, message: string) =>
+  status === 503 || status === 429 || (status === 400 && /location/i.test(message)) || status === 404
 
-// 塞車（503）通常幾秒內就會好：同一個模型等一下再試，還是不行再換下一個模型
-const BUSY_WAITS = [0, 2000, 5000]
+// 塞車（503）通常幾秒內就會好：同一個模型等一下再試一次，還是不行再換下一個模型
+const BUSY_WAITS = [0, 2000]
+
+// 額度用完或不開放的模型先冷卻一陣子，這段時間直接跳過，不必每一步都先被拒絕一次
+const cooldownKey = (model: string) => `cooldown:${model}`
+// 塞車一分鐘（KV 最短的期限）、額度用完 15 分鐘、不開放的 6 小時
+const cooldownSeconds = (status: number) => (status === 503 ? 60 : status === 429 ? 15 * 60 : 6 * 3600)
+
+async function availableModels(env: Env) {
+  const all = [env.MODEL, ...env.FALLBACK_MODELS.split(',').map((m) => m.trim())].filter(Boolean)
+  const cooling = await Promise.all(all.map((m) => env.TRIPS.get(cooldownKey(m))))
+  const ready = all.filter((_, i) => !cooling[i])
+  // 全部都在冷卻就還是照順序試，總比直接放棄好
+  return ready.length ? ready : all
+}
 
 async function call(env: Env, method: string, body: unknown, query = '', onRetry?: () => void) {
-  const models = [env.MODEL, env.FALLBACK_MODEL].filter(Boolean)
+  const models = await availableModels(env)
   let error: GeminiError | undefined
   const attempts = models.flatMap((model) => BUSY_WAITS.map((wait) => ({ model, wait })))
   for (const { model, wait } of attempts) {
@@ -59,6 +74,8 @@ async function call(env: Env, method: string, body: unknown, query = '', onRetry
     }
     error = new GeminiError(res.status, message)
     if (!retryable(res.status, message)) break
+    const ttl = cooldownSeconds(res.status)
+    if (ttl) await env.TRIPS.put(cooldownKey(model), String(res.status), { expirationTtl: ttl })
   }
   throw error!
 }

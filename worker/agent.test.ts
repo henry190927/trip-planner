@@ -10,10 +10,10 @@ const sse = (parts: unknown[]) =>
   new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts } }] })}\n\n`, { headers: { 'content-type': 'text/event-stream' } })
 const busyResponse = () => Response.json({ error: { message: 'high demand' } }, { status: 503 })
 
-/** Gemini 依序回傳 geminiReplies（用完後一直回最後一個）；Tavily 與 DNS 都正常 */
-function fakeEnv(geminiReplies: (() => Response)[]) {
+/** Gemini 依序回傳 geminiReplies（用完後一直回最後一個）；Tavily 與 DNS 都正常；kv 是假的 KV */
+function fakeEnv(geminiReplies: (() => Response)[], kv = new Map<string, string>()) {
   let n = 0
-  const gemini = vi.fn(async () => geminiReplies[Math.min(n++, geminiReplies.length - 1)]())
+  const gemini = vi.fn(async (_req: Request) => geminiReplies[Math.min(n++, geminiReplies.length - 1)]())
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -26,12 +26,13 @@ function fakeEnv(geminiReplies: (() => Response)[]) {
   )
   const env = {
     MODEL: 'main',
-    FALLBACK_MODEL: 'lite',
+    FALLBACK_MODELS: 'lite',
     TAVILY_API_KEY: 'tvly-test',
     GEMINI_API_KEY: 'k',
+    TRIPS: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) },
     RELAY: { idFromName: () => ({}), get: () => ({ fetch: gemini }) },
   } as unknown as Env
-  return { env, gemini }
+  return { env, gemini, kv }
 }
 
 async function run(env: Env) {
@@ -61,8 +62,8 @@ describe('runAgent 遇到模型塞車', () => {
     expect(text).toContain('先給你搜尋到的重點')
     expect(text).toContain('MISS 豬腳營業到 24:00')
     expect(events).toContainEqual({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
-    // 第一次成功 + 兩個模型各試三次
-    expect(gemini).toHaveBeenCalledTimes(7)
+    // 第一次成功 + 兩個模型各試兩次
+    expect(gemini).toHaveBeenCalledTimes(5)
   })
 
   it('還沒搜尋就塞車時照常回報錯誤', async () => {
@@ -105,5 +106,35 @@ describe('normalizeOps', () => {
       { op: 'add_spot', spot: { place: { name: 'A' }, category: 'cafe' } },
       { op: 'update_spot', ref: 'A', spotChanges: { verify: null } },
     ])
+  })
+})
+
+describe('模型冷卻', () => {
+  const modelOf = (call: unknown[]) => new URL((call[0] as Request).url).pathname.split('/').at(-1)!.split(':')[0]
+  const quota = () => Response.json({ error: { message: 'quota' } }, { status: 429 })
+
+  it('額度用完的模型記上冷卻，下一次直接跳過', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const kv = new Map<string, string>()
+    const first = fakeEnv([quota, () => sse([{ text: '好' }])], kv)
+    await run(first.env)
+    expect(first.gemini.mock.calls.map(modelOf)).toEqual(['main', 'lite'])
+    expect(kv.get('cooldown:main')).toBe('429')
+
+    const second = fakeEnv([() => sse([{ text: '好' }])], kv)
+    await run(second.env)
+    expect(second.gemini.mock.calls.map(modelOf)).toEqual(['lite'])
+  })
+
+  it('全部都在冷卻時還是照順序試', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const kv = new Map([
+      ['cooldown:main', '429'],
+      ['cooldown:lite', '429'],
+    ])
+    const { env, gemini } = fakeEnv([() => sse([{ text: '好' }])], kv)
+    const { error } = await run(env)
+    expect(error).toBeNull()
+    expect(gemini.mock.calls.map(modelOf)).toEqual(['main'])
   })
 })
