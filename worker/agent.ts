@@ -118,6 +118,7 @@ function systemPrompt(trip: Trip) {
 - 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
+- 回答時不要提到資料欄位名稱（例如 tentative、verify、routeId），用一般說法（「暫定」「待確認」）。
 - 你推薦但使用者還沒決定的項目設 tentative: true；沒有查證到的資訊（例如營業時間）寫進 verify。
 - 時間用 HH:MM、旅程當地時間；日期用 YYYY-MM-DD，必須在旅程期間內。
 - 只屬於某位旅伴的項目才填 who；routeId 只能用既有的路線 id。
@@ -156,6 +157,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       systemInstruction: { parts: [{ text: systemPrompt(stored.trip) }] },
       contents,
       tools,
+      generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
     })) {
       for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
         parts.push(part)
@@ -174,9 +176,16 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       if (call.name === 'web_search') {
         const query = String(args.query ?? '')
         emit({ type: 'status', text: `搜尋：${query}` })
-        const result = await searchWeb(env, query, today)
-        if (result.sources.length) emit({ type: 'sources', sources: result.sources })
-        response = { result: result.text, sources: result.sources.map((s) => s.url) }
+        try {
+          const result = await searchWeb(env, query, today)
+          if (result.sources.length) emit({ type: 'sources', sources: result.sources })
+          response = { result: result.text, sources: result.sources.map((s) => s.url) }
+        } catch (e) {
+          // 搜尋失敗不中斷對話，讓模型照實告訴使用者沒查到
+          console.error('web_search failed', e)
+          emit({ type: 'status', text: '搜尋暫時不能用' })
+          response = { error: '搜尋暫時無法使用。請告訴使用者這次沒能上網查證，憑既有知識回答的部分要標明「未查證」，或建議稍後再問。' }
+        }
       } else if (call.name === 'propose_changes') {
         const parsed = opsSchema.safeParse(normalizeOps(args.operations))
         if (!parsed.success) {

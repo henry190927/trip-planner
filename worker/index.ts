@@ -6,6 +6,8 @@ import type { Env } from './env'
 import { GeminiError } from './gemini'
 import { loadTrip, saveTrip, tripIds, undo } from './store'
 
+export { GeminiRelay } from './relay'
+
 // API
 //   GET  /api/trips              所有行程的最新版本（公開，跟網站本身一樣）
 //   POST /api/chat               聊天（SSE 串流）            需要通關密語
@@ -48,7 +50,11 @@ const authorized = (req: Request, env: Env) =>
 
 function geminiMessage(e: unknown) {
   if (e instanceof GeminiError) {
-    if (e.status === 429) return 'AI 的免費額度暫時用完了，過一陣子再試試。'
+    if (e.status === 429)
+      return /per day/i.test(e.message)
+        ? 'AI 今天的免費額度用完了，台灣時間下午 3 點左右會重置。'
+        : 'AI 的免費額度暫時用完了，過一分鐘再試試。'
+    if (e.status === 503) return 'AI 那邊現在太多人在用，等一下再試試。'
     if (e.status === 401 || e.status === 403) return 'AI 金鑰有問題，請檢查 Worker 的 GEMINI_API_KEY 設定。'
     return `AI 服務出錯（${e.status}）：${e.message}`
   }
@@ -103,7 +109,6 @@ export default {
       if (!authorized(req, env)) return json({ error: '通關密語不對' }, 401, cors)
 
       if (url.pathname === '/api/auth') return json({ ok: true }, 200, cors)
-
       if (url.pathname === '/api/chat') {
         const result = await chat(req, env, cors)
         if (result instanceof Response) return result

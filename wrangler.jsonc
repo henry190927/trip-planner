@@ -4,9 +4,13 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // 對 Gemini 的請求經由固定在美西的 Durable Object 轉發，見 worker/relay.ts
+  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "GeminiRelay" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GeminiRelay"] }],
   "kv_namespaces": [{ "binding": "TRIPS", "id": "0f6242a045fb4b908da7a86f9ab10c00" }],
   "vars": {
-    "MODEL": "gemini-2.5-flash",
+    "MODEL": "gemini-3.6-flash",
+    "FALLBACK_MODEL": "gemini-3.1-flash-lite",
     "ALLOWED_ORIGINS": "https://henry190927.github.io"
   }
   // 機密設定用 `wrangler secret put` 設定，不寫在這裡：GEMINI_API_KEY、APP_PASSCODE
