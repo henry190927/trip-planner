@@ -141,14 +141,14 @@ export default {
           return json({ version: next.version }, 200, cors)
         }
 
-        const body = (await req.json().catch(() => null)) as { ops?: unknown; summary?: string } | null
+        const body = (await req.json().catch(() => null)) as { ops?: unknown; summary?: string; source?: string } | null
         const parsed = opsSchema.safeParse(body?.ops)
         if (!parsed.success) return json({ error: '修改內容格式不對' }, 400, cors)
         // 一律套在最新版本上：AI 提案之後若另一個人改過，這裡會重新檢查一次
         const applied = applyOps(stored.trip, parsed.data)
         if (applied.errors.length) return json({ error: '這個修改跟目前的行程對不起來', details: applied.errors }, 409, cors)
         const next = await saveTrip(env, id, applied.trip, String(body?.summary ?? '修改行程').slice(0, 200), stored, {
-          source: 'ai',
+          source: body?.source === 'manual' ? 'manual' : 'ai',
           changes: applied.changes,
         })
         return json({ ...published(next), changes: applied.changes }, 200, cors)

@@ -112,11 +112,15 @@ describe('地點清單', () => {
     expect(r.changes[0].text).toBe('地點清單：MISS 豬腳 弘大店：營業時間、營業時段、確認日期、待確認')
   })
 
-  it('還排在行程裡的地點不能直接刪；口袋名單可以', () => {
+  it('還排在行程裡、或被備案用到的地點不能直接刪；沒人用的口袋名單可以', () => {
     expect(applyOps(seoul2026, [{ op: 'remove_spot', ref: 'miss-jokbal' }]).errors[0]).toContain('還排在行程裡')
-    const r = applyOps(seoul2026, [{ op: 'remove_spot', ref: '一片里肌 弘大總店' }])
+    expect(applyOps(seoul2026, [{ op: 'remove_spot', ref: '一片里肌 弘大總店' }]).errors[0]).toContain('是其他項目的備案')
+    const r = applyOps(seoul2026, [
+      { op: 'add_spot', spot: pocket },
+      { op: 'remove_spot', ref: '測試咖啡' },
+    ])
     expect(r.errors).toEqual([])
-    expect(r.trip.spots!.some((s) => s.id === 'ilpyeon-deungsim')).toBe(false)
+    expect(r.trip.spots!.some((s) => s.place.name === '測試咖啡')).toBe(false)
   })
 
   it('行程項目指到不存在的地點會被擋下', () => {
@@ -127,5 +131,90 @@ describe('地點清單', () => {
   it('格式檢查接受地點動作', () => {
     expect(opsSchema.safeParse([{ op: 'add_spot', spot: pocket }, { op: 'remove_spot', ref: 'x' }]).success).toBe(true)
     expect(opsSchema.safeParse([{ op: 'add_spot', spot: { place: { name: 'x' }, category: 'bar' } }]).success).toBe(false)
+  })
+})
+
+describe('備案', () => {
+  const jokbal = { date: day2, title: 'MISS 豬腳宵夜' }
+  const item = (trip: typeof seoul2026, title: string) => trip.days[1].items.find((i) => i.title === title)!
+  // 從 MISS 豬腳沒有備案的行程開始，備案編號才固定
+  const bare = structuredClone(seoul2026)
+  delete bare.days[1].items.find((i) => i.title === 'MISS 豬腳宵夜')!.alternatives
+  const withAlts = () =>
+    applyOps(bare, [
+      { op: 'add_alternative', ...jokbal, alternative: { trigger: 'full', title: '外帶回住宿吃', note: '問「포장 돼요?」' } },
+      { op: 'add_alternative', ...jokbal, alternative: { trigger: 'closed', title: '改吃一片里肌', time: '21:00', spotId: 'ilpyeon-deungsim' } },
+    ])
+
+  it('加備案會記在項目上，修改紀錄寫出觸發條件', () => {
+    const r = withAlts()
+    expect(r.errors).toEqual([])
+    expect(item(r.trip, 'MISS 豬腳宵夜').alternatives).toHaveLength(2)
+    expect(r.changes[0].text).toBe('11/7 21:30「MISS 豬腳宵夜」 的備案（客滿）：外帶回住宿吃')
+  })
+
+  it('啟用備案：沒寫時間就沿用，原本的安排變成可以換回來的備案', () => {
+    const base = withAlts().trip
+    const r = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }])
+    expect(r.errors).toEqual([])
+    const now = item(r.trip, '外帶回住宿吃')
+    expect(now).toMatchObject({ time: '21:30', kind: 'food', note: '問「포장 돼요?」', usedAlternative: { trigger: 'full' } })
+    expect(now.place).toBeUndefined()
+    expect(now.spotId).toBeUndefined()
+    expect(now.verify).toBeUndefined()
+    expect(now.alternatives![0]).toMatchObject({ original: true, title: 'MISS 豬腳宵夜', spotId: 'miss-jokbal', time: '21:30' })
+    expect(r.changes[0].text).toBe('11/7 21:30「MISS 豬腳宵夜」 改用備案（客滿）：「外帶回住宿吃」')
+  })
+
+  it('換過去再換回來，內容與原本一模一樣（除了被拿掉的待確認）', () => {
+    const base = withAlts().trip
+    const there = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
+    const back = applyOps(there, [{ op: 'use_alternative', date: day2, title: '外帶回住宿吃', index: 0 }])
+    expect(back.errors).toEqual([])
+    const { verify: _verify, alternatives: _alts, ...original } = item(base, 'MISS 豬腳宵夜')
+    const { alternatives: altsBack, ...restored } = item(back.trip, 'MISS 豬腳宵夜')
+    expect(restored).toEqual(original)
+    expect(altsBack).toEqual(item(base, 'MISS 豬腳宵夜').alternatives)
+    expect(back.changes[0].text).toContain('換回原本的安排')
+  })
+
+  it('沒寫時間的備案一直沿用目前的時間：換回來、改時間、再換過去，用的是新時間', () => {
+    const base = withAlts().trip
+    const there = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
+    const back = applyOps(there, [{ op: 'use_alternative', date: day2, title: '外帶回住宿吃', index: 0 }]).trip
+    expect(item(back, 'MISS 豬腳宵夜').alternatives![0]).not.toHaveProperty('time')
+    const moved = applyOps(back, [{ op: 'update_item', ...jokbal, changes: { time: '22:00' } }]).trip
+    const again = applyOps(moved, [{ op: 'use_alternative', ...jokbal, index: 0 }])
+    expect(again.errors).toEqual([])
+    expect(item(again.trip, '外帶回住宿吃').time).toBe('22:00')
+  })
+
+  it('從一個備案直接換到另一個：前一個備案保留自己的觸發條件；有指定時間就重新排序', () => {
+    const base = withAlts().trip
+    const a = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
+    const b = applyOps(a, [{ op: 'use_alternative', date: day2, title: '外帶回住宿吃', index: 1 }])
+    expect(b.errors).toEqual([])
+    const now = item(b.trip, '改吃一片里肌')
+    expect(now).toMatchObject({ time: '21:00', spotId: 'ilpyeon-deungsim', usedAlternative: { trigger: 'closed' } })
+    expect(now.alternatives!.map((x) => [x.title, x.trigger, x.original ?? false])).toEqual([
+      ['MISS 豬腳宵夜', 'other', true],
+      ['外帶回住宿吃', 'full', false],
+    ])
+    const list = titles(b.trip, day2)
+    expect(list.indexOf('改吃一片里肌')).toBeLessThan(list.indexOf('一起搭地鐵回弘大') + 2)
+  })
+
+  it('刪除備案；原本的安排不能刪；編號不存在會回報', () => {
+    const base = withAlts().trip
+    const r = applyOps(base, [{ op: 'remove_alternative', ...jokbal, index: 1 }])
+    expect(item(r.trip, 'MISS 豬腳宵夜').alternatives!.map((a) => a.title)).toEqual(['外帶回住宿吃'])
+    const there = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
+    expect(applyOps(there, [{ op: 'remove_alternative', date: day2, title: '外帶回住宿吃', index: 0 }]).errors[0]).toContain('不能刪')
+    expect(applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 5 }]).errors[0]).toContain('沒有第 6 個備案')
+  })
+
+  it('備案指到不存在的地點會被擋下', () => {
+    const r = applyOps(seoul2026, [{ op: 'add_alternative', ...jokbal, alternative: { trigger: 'rain', title: 'x', spotId: 'nope' } }])
+    expect(r.errors.join()).toContain('不在地點清單裡')
   })
 })

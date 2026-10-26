@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { AnimatePresence, motion, type PanInfo } from 'motion/react'
-import type { Item, Trip } from '../types'
+import type { Item, Trigger, Trip } from '../types'
+import { triggers } from '../schema'
+import { triggerLabels } from '../lib/triggers'
+import { triggerIcons } from './Alternatives'
 import { formatDate, weekday, type TripPhase, type ZonedNow } from '../lib/time'
 import { usePrefs } from '../lib/store'
 import TimelineItem from './TimelineItem'
@@ -64,6 +67,18 @@ export default function DayView({ trip, now, phase, focus }: { trip: Trip; now: 
   const viewer = usePrefs((s) => s.viewer[trip.id])
   const day = trip.days[index]
   const items = day.items.filter((item) => visibleTo(item, viewer))
+  // 「遇到狀況？」：這一天有哪些情況有備案；換一天就清掉
+  const [scenario, setScenario] = useState<Trigger>()
+  const [scenarioDay, setScenarioDay] = useState(day.date)
+  if (scenarioDay !== day.date) {
+    setScenarioDay(day.date)
+    setScenario(undefined)
+  }
+  const scenarioCounts = new Map<Trigger, number>()
+  for (const item of items)
+    for (const t of new Set((item.alternatives ?? []).filter((a) => !a.original).map((a) => a.trigger)))
+      scenarioCounts.set(t, (scenarioCounts.get(t) ?? 0) + 1)
+  const scenarios = triggers.filter((t) => scenarioCounts.has(t))
 
   const go = (next: number) => {
     if (next < 0 || next >= trip.days.length || next === index) return
@@ -147,12 +162,45 @@ export default function DayView({ trip, now, phase, focus }: { trip: Trip; now: 
               <SceneArt scene={day.scene} className="-my-2 -mr-2 w-28 shrink-0" />
             </div>
 
+            {scenarios.length > 0 && (
+              <div className="mb-4 rounded-3xl bg-card/70 px-3 py-2.5">
+                <p className="px-1 text-xs font-extrabold text-mute">遇到狀況？點一下看有哪些備案</p>
+                <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto">
+                  {scenarios.map((t) => {
+                    const Icon = triggerIcons[t]
+                    const active = scenario === t
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => {
+                          setScenario(active ? undefined : t)
+                          // 捲到第一個有對應備案的項目（等展開動畫開始）
+                          if (!active)
+                            setTimeout(() => document.querySelector('[data-scenario-match]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+                        }}
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold transition-colors ${
+                          active ? 'bg-ink text-paper' : 'bg-cream text-ink'
+                        }`}
+                      >
+                        <Icon className="size-3.5" />
+                        {triggerLabels[t]} {scenarioCounts.get(t)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <ol>
               {items.map((item, i) => (
                 <TimelineItem
                   key={`${item.time}-${item.title}`}
                   item={item}
                   trip={trip}
+                  date={day.date}
+                  scenario={scenario}
                   last={i === items.length - 1}
                   state={i === currentIdx ? 'now' : i === nextIdx ? 'next' : undefined}
                 />

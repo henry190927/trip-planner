@@ -1,4 +1,4 @@
-import { itemKinds, opsSchema, spotCategories } from '../src/schema'
+import { itemKinds, opsSchema, spotCategories, triggers } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
@@ -65,6 +65,18 @@ const openRange = {
   },
   required: ['days', 'from', 'to'],
 }
+const alternativeProps = {
+  trigger: { type: 'string', enum: [...triggers], description: 'full 客滿・closed 沒開・rain 下雨・tired 太累・early 早到・late 晚到・other 其他' },
+  when: str('補充觸發條件，例如「排隊超過 30 分鐘」；trigger 是 other 時必填'),
+  title: str('改成做什麼'),
+  kind: { type: 'string', enum: [...itemKinds], description: '跟原本不同時才填' },
+  time: str('HH:MM；時間跟原本一樣就省略'),
+  end: str('HH:MM'),
+  place: placeSchema,
+  spotId: str('地點清單裡的地點 id'),
+  routeId: str('交通指南的路線 id'),
+  note: str('補充說明'),
+}
 const spotProps = {
   place: placeSchema,
   category: { type: 'string', enum: [...spotCategories], description: 'food 餐廳・cafe 咖啡飲料・shopping 逛街・sight 景點・other 其他' },
@@ -123,11 +135,16 @@ const tools = [
                       'add_spot',
                       'update_spot',
                       'remove_spot',
+                      'add_alternative',
+                      'remove_alternative',
+                      'use_alternative',
                     ],
                   },
                   date: str('YYYY-MM-DD'),
-                  title: str('update_item / remove_item：目前項目的標題（要完全相同）'),
-                  time: str('update_item / remove_item：同一天有同名項目時用目前的時間區分'),
+                  title: str('update_item / remove_item / *_alternative：目前項目的標題（要完全相同）'),
+                  time: str('update_item / remove_item / *_alternative：同一天有同名項目時用目前的時間區分'),
+                  alternative: { type: 'object', properties: alternativeProps, required: ['trigger', 'title'], description: 'add_alternative 的備案' },
+                  index: { type: 'integer', description: 'remove_alternative / use_alternative：第幾個備案（從 0 開始）' },
                   item: { type: 'object', properties: itemProps, required: ['kind', 'title'], description: 'add_item 的新項目' },
                   changes: {
                     type: 'object',
@@ -179,6 +196,9 @@ function systemPrompt(trip: Trip) {
 - 把清單裡的地點排進行程時，行程項目的 spotId 填那個地點的 id；同一個地點的營業時間、交通等資訊寫在地點上，不要重複寫在行程項目裡。
 - 地點的營業時間（hours、open）只填有可靠來源的（官方網站、地圖 App、近期的店家資訊頁），並填 checkedAt；部落格或摘要說法不一致時寫進 verify，不要猜。
 - 推薦備案或「附近還有什麼」時，先看地點清單裡同地區、有對應標籤的地點，不夠再上網查。
+- 備案（alternatives）掛在行程項目上，寫清楚什麼情況（trigger）改成做什麼。排有風險的項目時（熱門店可能客滿、戶外行程怕下雨、時間很趕），可以順便提議 1–2 個備案；備案的地點最好在同一區，時間跟原本一樣就不要填 time。
+- 使用者說遇到狀況（「客滿了」「下雨了」「早到了」）時，先看那個項目有沒有對應的備案；有的話建議用 use_alternative 直接換，沒有再找新的。
+- 項目的 usedAlternative 代表目前用的是備案；備案清單裡 original 為 true 的是原本的安排，換回去也是 use_alternative。
 
 # 目前的行程資料（JSON）
 ${JSON.stringify(trip)}`
@@ -204,6 +224,7 @@ export function normalizeOps(raw: unknown) {
     )
     if (kept.item) kept.item = stripNulls(kept.item)
     if (kept.spot) kept.spot = stripNulls(kept.spot)
+    if (kept.alternative) kept.alternative = stripNulls(kept.alternative)
     return kept
   })
 }

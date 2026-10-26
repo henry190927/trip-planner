@@ -24,6 +24,11 @@ export function integrityErrors(trip: Trip): string[] {
       if (item.routeId && !routeIds.has(item.routeId)) errors.push(`「${item.title}」的 routeId「${item.routeId}」不存在`)
       for (const id of item.who ?? []) if (!travelerIds.has(id)) errors.push(`「${item.title}」的旅伴「${id}」不存在`)
       if (item.spotId && !spotIds.has(item.spotId)) errors.push(`「${item.title}」的地點「${item.spotId}」不在地點清單裡`)
+      for (const alt of item.alternatives ?? []) {
+        if (alt.spotId && !spotIds.has(alt.spotId)) errors.push(`「${item.title}」的備案「${alt.title}」的地點「${alt.spotId}」不在地點清單裡`)
+        if (alt.routeId && !routeIds.has(alt.routeId)) errors.push(`「${item.title}」的備案「${alt.title}」的 routeId「${alt.routeId}」不存在`)
+      }
+      if ((item.alternatives ?? []).filter((a) => a.original).length > 1) errors.push(`「${item.title}」有不只一個「原本的安排」`)
     }
   for (const r of trip.routes) {
     for (const id of r.who ?? []) if (!travelerIds.has(id)) errors.push(`路線「${r.title}」的旅伴「${id}」不存在`)

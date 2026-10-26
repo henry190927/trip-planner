@@ -11,7 +11,7 @@ export interface Change {
 export interface LogEntry {
   version: number
   at: string
-  source: 'ai' | 'undo' | 'sync'
+  source: 'ai' | 'manual' | 'undo' | 'sync'
   summary: string
   changes: Change[]
 }
@@ -77,6 +77,14 @@ export const applyProposal = (passcode: string, tripId: string, p: Proposal) =>
     method: 'POST',
     passcode,
     body: JSON.stringify({ ops: p.ops, summary: p.summary }),
+  })
+
+/** 直接在畫面上操作的修改（例如啟用備案），不經過小樹 */
+export const applyManual = (passcode: string, tripId: string, ops: unknown[], summary: string) =>
+  request<Versioned & { changes: Change[] }>(`/api/trips/${tripId}/apply`, {
+    method: 'POST',
+    passcode,
+    body: JSON.stringify({ ops, summary, source: 'manual' }),
   })
 
 export const undoLast = (passcode: string, tripId: string) =>
