@@ -228,7 +228,7 @@ function systemPrompt(trip: Trip) {
 - 推薦備案或「附近還有什麼」時，先看地點清單裡同地區、有對應標籤的地點，不夠再上網查。
 - 備案（alternatives）掛在行程項目上，寫清楚什麼情況（trigger）改成做什麼。排有風險的項目時（熱門店可能客滿、戶外行程怕下雨、時間很趕），可以順便提議 1–2 個備案；備案的地點最好在同一區，時間跟原本一樣就不要填 time。
 - 使用者說遇到狀況（「客滿了」「下雨了」「早到了」）時，先看那個項目有沒有對應的備案；有的話建議用 use_alternative 直接換，沒有再找新的。
-- 固定行程（班機、演唱會、fixed 為 true 的項目）時間不能動。行程有延誤或提早時，用 shift_items 把彈性項目整段挪動，預設只挪到下一個固定行程之前；挪不動（會撞到固定行程）時，改建議刪掉或縮短某個彈性項目，或改用備案。
+- 固定行程（班機、演唱會、fixed 為 true 的項目）時間不能動。行程有延誤或提早時，用 shift_items 把彈性項目整段挪動（一定要填 from 與 minutes，例如 { op: 'shift_items', date, from: '12:00', minutes: 30 }），預設只挪到下一個固定行程之前；挪不動（會撞到固定行程）時，改建議刪掉或縮短某個彈性項目，或改用備案。
 - 算空檔、來不來得及時先呼叫 find_free_time，不要自己做時間加減。
 - 項目的 usedAlternative 代表目前用的是備案；備案清單裡 original 為 true 的是原本的安排，換回去也是 use_alternative。
 
@@ -350,7 +350,12 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       } else if (call.name === 'propose_changes') {
         const parsed = opsSchema.safeParse(normalizeOps(args.operations))
         if (!parsed.success) {
-          response = { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join('.')}：${i.message}`) }
+          response = {
+            ok: false,
+            errors: Array.isArray(args.operations)
+              ? parsed.error.issues.map((i) => `operations.${i.path.join('.')}：${i.message}`)
+              : ['operations 要是一個陣列，至少放一個修改動作'],
+          }
         } else {
           const applied = applyOps(stored.trip, parsed.data)
           if (applied.errors.length) {
@@ -369,7 +374,10 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
             response = { ok: true, shownToUser: applied.changes.map((c) => c.text), note: '已顯示給使用者，等使用者按「套用」才會生效。' }
           }
         }
-        if (!response.ok) emit({ type: 'status', text: '修改內容有誤，重新調整中…' })
+        if (!response.ok) {
+          console.log('proposal rejected', JSON.stringify(response.errors).slice(0, 1500))
+          emit({ type: 'status', text: '修改內容有誤，重新調整中…' })
+        }
       } else {
         response = { error: `沒有 ${call.name} 這個工具` }
       }
