@@ -50,7 +50,7 @@ export function Sparkle({ x, y, r = 6, delay = 0, fill = C.white }: { x: number;
   )
 }
 
-/** 小芽：這趟旅程的吉祥物（植木日 → 種一棵樹） */
+/** 小樹：這趟旅程的吉祥物（植木日 → 種一棵樹） */
 export function Sprout({ className }: Props) {
   return (
     <Svg className={className}>

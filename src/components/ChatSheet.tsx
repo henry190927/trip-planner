@@ -25,7 +25,7 @@ function MiniSprout({ className = 'size-9' }: { className?: string }) {
 
 function Typing() {
   return (
-    <span className="inline-flex gap-1 py-1" aria-label="小芽正在輸入">
+    <span className="inline-flex gap-1 py-1" aria-label="小樹正在輸入">
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
@@ -281,7 +281,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
               <header className="flex items-center gap-2 border-b-2 border-cream px-4 pb-2 pt-3">
                 <MiniSprout />
                 <div className="min-w-0 flex-1">
-                  <p className="font-black leading-tight">小芽</p>
+                  <p className="font-black leading-tight">小樹</p>
                   <p className="text-[11px] font-bold text-mute">會上網查資料・改行程前先問你</p>
                 </div>
                 {hasApplied && (
@@ -309,7 +309,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                     {messages.length === 0 && (
                       <div className="flex flex-col items-center pt-4 text-center">
                         <Sprout className="w-28" />
-                        <p className="mt-2 text-lg font-black">嗨！我是小芽</p>
+                        <p className="mt-2 text-lg font-black">嗨！我是小樹</p>
                         <p className="mt-1 text-sm text-mute">想加什麼行程、查什麼資料，都可以問我。</p>
                         <div className="mt-5 flex flex-col gap-2">
                           {suggestions.map((s) => (
@@ -353,7 +353,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                           submit()
                         }
                       }}
-                      placeholder="問小芽，或請小芽改行程…"
+                      placeholder="問小樹，或請小樹改行程…"
                       aria-label="訊息"
                       className="max-h-30 min-h-11 flex-1 resize-none rounded-3xl border-2 border-butter bg-card px-4 py-2.5 text-[16px] leading-snug outline-none focus:border-sky"
                     />
