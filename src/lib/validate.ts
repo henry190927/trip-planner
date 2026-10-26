@@ -16,11 +16,14 @@ export function integrityErrors(trip: Trip): string[] {
   }
 
   const routeIds = new Set(trip.routes.map((r) => r.id))
+  const spotIds = new Set((trip.spots ?? []).map((s) => s.id))
+  if (spotIds.size !== (trip.spots ?? []).length) errors.push('地點 id 重複')
   const travelerIds = new Set(trip.travelers.map((t) => t.id))
   for (const day of trip.days)
     for (const item of day.items) {
       if (item.routeId && !routeIds.has(item.routeId)) errors.push(`「${item.title}」的 routeId「${item.routeId}」不存在`)
       for (const id of item.who ?? []) if (!travelerIds.has(id)) errors.push(`「${item.title}」的旅伴「${id}」不存在`)
+      if (item.spotId && !spotIds.has(item.spotId)) errors.push(`「${item.title}」的地點「${item.spotId}」不在地點清單裡`)
     }
   for (const r of trip.routes) {
     for (const id of r.who ?? []) if (!travelerIds.has(id)) errors.push(`路線「${r.title}」的旅伴「${id}」不存在`)

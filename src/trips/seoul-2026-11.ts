@@ -1,4 +1,4 @@
-import type { Place, Trip } from '../types'
+import type { Place, Spot, Trip } from '../types'
 
 const HER = 'her'
 const ME = 'me'
@@ -36,6 +36,88 @@ const musinsaStandard: Place = {
 }
 const jokbal: Place = { name: 'MISS 豬腳 弘大店', local: '미쓰족발 홍대', mapQuery: '미쓰족발 홍대' }
 
+const joseonHwaro: Place = {
+  name: '朝鮮火爐烤肉 (조선화로구이)',
+  local: '조선화로구이',
+  address: '351-18 Seogyo-dong, Mapo-gu, Seoul',
+  addressLocal: ['서울특별시 마포구 서교동 351-18'],
+  mapQuery: '조선화로구이',
+}
+const ept: Place = {
+  name: 'EPT 弘大店',
+  local: '이피티 홍대점',
+  address: '62 Dongmak-ro 7-gil, Mapo-gu, Seoul',
+  addressLocal: ['서울특별시 마포구 독막로7길 62'],
+  mapQuery: '이피티 홍대점',
+}
+const mangwon: Place = { name: '望遠市場', local: '망원시장', mapQuery: '망원시장' }
+
+const hoursUnknown = '營業時間待確認（出發前看 Naver Map）'
+
+// 地點分頁：已排進行程的店，和還沒排的口袋名單。營業時間查不到可靠來源前不填。
+const spots: Spot[] = [
+  {
+    id: 'musinsa-kicks',
+    place: musinsaKicks,
+    category: 'shopping',
+    area: '弘大',
+    access: '弘大入口站 9 號出口附近',
+    tags: ['鞋子'],
+    note: '2026 年 1 月開的鞋子專門店，地上 1–3 樓。',
+    verify: hoursUnknown,
+  },
+  {
+    id: 'musinsa-standard',
+    place: musinsaStandard,
+    category: 'shopping',
+    area: '弘大',
+    tags: ['衣服', '可退稅'],
+    note: 'MUSINSA 自有品牌旗艦店。外國旅客滿額可以退稅，記得帶護照。',
+    verify: hoursUnknown,
+  },
+  {
+    id: 'joseon-hwaro',
+    place: joseonHwaro,
+    category: 'food',
+    area: '弘大',
+    tags: ['韓牛', '燒肉'],
+    verify: hoursUnknown,
+  },
+  {
+    id: 'ept-hongdae',
+    place: ept,
+    category: 'shopping',
+    area: '弘大',
+    tags: ['鞋子'],
+    verify: hoursUnknown,
+  },
+  {
+    id: 'miss-jokbal',
+    place: jokbal,
+    category: 'food',
+    area: '弘大',
+    tags: ['豬腳', '宵夜'],
+    verify: hoursUnknown,
+  },
+  {
+    id: 'ilpyeon-deungsim',
+    place: { name: '一片里肌 弘大總店', local: '일편등심 홍대본점', mapQuery: '일편등심 홍대본점' },
+    category: 'food',
+    area: '弘大',
+    tags: ['韓牛', '燒肉'],
+    verify: hoursUnknown,
+  },
+  {
+    id: 'mangwon-market',
+    place: mangwon,
+    category: 'sight',
+    area: '望遠',
+    tags: ['市場', '小吃'],
+    note: '在住宿附近，可以跟京義線林蔭道一起逛。',
+    verify: hoursUnknown,
+  },
+]
+
 const concert = '南優鉉《식목일VI – EVER GREEN》'
 
 export const seoul2026: Trip = {
@@ -53,6 +135,8 @@ export const seoul2026: Trip = {
     { id: HER, name: '她', color: '#FFCCB8', ink: '#c4583a' },
     { id: ME, name: '我', color: '#97D7FF', ink: '#1f74ad' },
   ],
+
+  spots,
 
   pending: [
     '周邊（MD）販售的時間與地點：等主辦（빌리언스）公告',
@@ -217,36 +301,37 @@ export const seoul2026: Trip = {
       scene: 'concert',
       items: [
         {
-          time: '10:00',
+          time: '12:00',
           kind: 'food',
-          title: '睡飽・早午餐',
-          place: { name: '延南洞', local: '연남동', mapQuery: '연남동 브런치' },
-          note: '延南洞就在弘大入口站另一側，咖啡廳和早午餐店很多。',
-          tentative: true,
+          title: '午餐・韓牛燒肉「朝鮮火爐烤肉」',
+          place: joseonHwaro,
+          spotId: 'joseon-hwaro',
         },
         {
-          time: '11:30',
+          time: '13:00',
+          end: '13:30',
           kind: 'shopping',
-          title: 'MUSINSA KICKS 弘大：逛鞋子',
-          place: musinsaKicks,
-          note: '2026 年 1 月開的鞋子專門店，地上 1–3 樓，在弘大入口站 9 號出口附近。',
-          verify: '營業時間出發前在 Naver Map 確認',
-        },
-        {
-          time: '12:30',
-          kind: 'shopping',
-          title: 'MUSINSA STANDARD 弘大：逛衣服',
-          place: musinsaStandard,
-          note: 'MUSINSA 自有品牌的旗艦店，在弘大 Mercure Ambassador 飯店那棟（2025 年 11 月重新開幕）。外國旅客滿額可以退稅，記得帶護照。',
-          verify: '營業時間出發前在 Naver Map 確認',
+          title: '逛鞋店 EPT 弘大店',
+          place: ept,
+          spotId: 'ept-hongdae',
+          note: '弘大熱門鞋店，適合逛完 MUSINSA 後順路去。營業時間：12:00–22:00。',
         },
         {
           time: '13:30',
-          kind: 'food',
-          title: '午餐・回住宿放戰利品',
-          place: stay,
-          note: '她要準備出門，手機、行動電源、應援棒都充飽。',
-          tentative: true,
+          end: '14:15',
+          kind: 'shopping',
+          title: 'MUSINSA KICKS 弘大：逛鞋子',
+          place: musinsaKicks,
+          spotId: 'musinsa-kicks',
+          note: '2026 年 1 月開的鞋子專門店，地上 1–3 樓。吃飽後散步去逛街。',
+        },
+        {
+          time: '14:15',
+          kind: 'shopping',
+          title: 'MUSINSA STANDARD 弘大：逛衣服',
+          place: musinsaStandard,
+          spotId: 'musinsa-standard',
+          note: 'MUSINSA 自有品牌的旗艦店，外國旅客滿額退稅，記得帶護照。逛完直接送她去搭車。',
         },
         {
           time: '14:45',
@@ -262,7 +347,8 @@ export const seoul2026: Trip = {
           who: [ME],
           kind: 'sight',
           title: '自由時間：京義線林蔭道・望遠市場',
-          place: { name: '望遠市場', local: '망원시장', mapQuery: '망원시장' },
+          place: mangwon,
+          spotId: 'mangwon-market',
           note: '都在住宿附近，逛累了隨時能回去。晚上要吃豬腳，下午別吃太飽。',
           tentative: true,
         },
@@ -311,6 +397,7 @@ export const seoul2026: Trip = {
           kind: 'food',
           title: 'MISS 豬腳宵夜',
           place: jokbal,
+          spotId: 'miss-jokbal',
           note: '慶祝兩場都看完！吃完回去收行李、秤重，明天 06:45 起床。',
           verify: '營業時間與最後點餐時間在 Naver Map 確認；太晚沒開就改到中午吃',
         },

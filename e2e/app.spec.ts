@@ -64,7 +64,7 @@ test('用底部導覽列切遍所有分頁，畫面都不會消失', async ({ pa
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await page.goto(`./${trip}`)
-  for (const tab of ['交通', '資訊', '清單', '行程', '清單', '資訊', '交通', '行程']) {
+  for (const tab of ['交通', '地點', '資訊', '清單', '行程', '清單', '地點', '資訊', '交通', '行程']) {
     const link = page.getByRole('link', { name: tab, exact: true })
     await link.click()
     await expect(link).toHaveAttribute('aria-current', 'page')

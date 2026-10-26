@@ -38,6 +38,8 @@ export const itemSchema = z.object({
   tentative: z.boolean().optional(),
   /** 出發前還要確認的事 */
   verify: z.string().optional(),
+  /** 對應「地點」分頁的哪一個地點 */
+  spotId: z.string().optional(),
 })
 
 export const scenes = ['depart', 'concert', 'stroll', 'home'] as const
@@ -121,6 +123,38 @@ export const checklistGroupSchema = z.object({
   items: z.array(z.object({ id: z.string(), label: z.string() })),
 })
 
+export const spotCategories = ['food', 'cafe', 'shopping', 'sight', 'other'] as const
+
+/** 一段營業時間。to 小於等於 from 代表營業到隔天（例如 18:00–02:00）；整天營業寫 00:00–24:00 */
+export const openRangeSchema = z.object({
+  /** 0 = 星期日 … 6 = 星期六 */
+  days: z.array(z.number().int().min(0).max(6)).min(1),
+  from: hhmm,
+  to: hhmm,
+})
+
+/** 「地點」分頁的一筆：已排進行程的地點，或還沒排的口袋名單 */
+export const spotSchema = z.object({
+  id: z.string(),
+  place: placeSchema,
+  category: z.enum(spotCategories),
+  /** 所在地區，例如「弘大」，篩選與找同區備案用 */
+  area: z.string().optional(),
+  /** 顯示用的營業時間文字，例如「12:30–24:00（最後點餐 23:00）」 */
+  hours: z.string().optional(),
+  /** 判斷「現在營業中」用；沒有可靠資料就不要填 */
+  open: z.array(openRangeSchema).optional(),
+  /** 公休日說明 */
+  closed: z.string().optional(),
+  /** 怎麼去，例如「弘大入口站 9 號出口走路 3 分」 */
+  access: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  note: z.string().optional(),
+  /** 營業時間等資訊最後一次確認的日期 */
+  checkedAt: isoDate.optional(),
+  verify: z.string().optional(),
+})
+
 export const travelerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -148,6 +182,8 @@ export const tripSchema = z.object({
   routes: z.array(routeSchema),
   tips: z.array(tipSectionSchema),
   checklist: z.array(checklistGroupSchema),
+  /** 地點清單（含口袋名單） */
+  spots: z.array(spotSchema).optional(),
   /** 尚未提供的資料 */
   pending: z.array(z.string()).optional(),
 })
@@ -169,6 +205,24 @@ const itemChangesSchema = z
     routeId: z.string().nullable(),
     tentative: z.boolean().nullable(),
     verify: z.string().nullable(),
+    spotId: z.string().nullable(),
+  })
+  .partial()
+
+/** 修改既有地點時要改的欄位；值給 null 代表刪掉那個欄位 */
+const spotChangesSchema = z
+  .object({
+    place: placeSchema,
+    category: z.enum(spotCategories),
+    area: z.string().nullable(),
+    hours: z.string().nullable(),
+    open: z.array(openRangeSchema).nullable(),
+    closed: z.string().nullable(),
+    access: z.string().nullable(),
+    tags: z.array(z.string()).nullable(),
+    note: z.string().nullable(),
+    checkedAt: isoDate.nullable(),
+    verify: z.string().nullable(),
   })
   .partial()
 
@@ -186,6 +240,11 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_checklist_item'), group: z.string(), label: z.string() }),
   z.object({ op: z.literal('add_pending'), text: z.string() }),
   z.object({ op: z.literal('remove_pending'), text: z.string() }),
+  /** 加進地點清單；id 省略時自動產生 */
+  z.object({ op: z.literal('add_spot'), spot: spotSchema.extend({ id: z.string().optional() }) }),
+  /** ref：地點的 id、名稱或當地語言名稱 */
+  z.object({ op: z.literal('update_spot'), ref: z.string(), spotChanges: spotChangesSchema }),
+  z.object({ op: z.literal('remove_spot'), ref: z.string() }),
 ])
 
 export const opsSchema = z.array(opSchema).min(1).max(20)

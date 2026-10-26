@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trips } from '../src/trips'
-import { runAgent, searchDigest, type ChatEvent } from './agent'
+import { normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -92,5 +92,18 @@ describe('searchDigest', () => {
     expect(text).toContain('**A 店**\nA 營業到 22:00')
     expect(text).toContain('- [B 店官網](https://b.example)：B 的營業時間 是 10:00')
     expect(text).toContain('**C 店**\n這一項沒查到。')
+  })
+})
+
+describe('normalizeOps', () => {
+  it('新地點的 null 欄位去掉，spotChanges 的 null 保留（代表刪除）', () => {
+    const ops = normalizeOps([
+      { op: 'add_spot', spot: { place: { name: 'A', local: null }, category: 'cafe', hours: null }, changes: null, ref: '' },
+      { op: 'update_spot', ref: 'A', spotChanges: { verify: null } },
+    ])
+    expect(ops).toEqual([
+      { op: 'add_spot', spot: { place: { name: 'A' }, category: 'cafe' } },
+      { op: 'update_spot', ref: 'A', spotChanges: { verify: null } },
+    ])
   })
 })
