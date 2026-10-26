@@ -152,10 +152,16 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
       if (item.spotId) scheduled.set(item.spotId, [...(scheduled.get(item.spotId) ?? []), { date: day.date, time: item.time }])
 
   const status = (s: Spot) => openStatus(s.open, now.date, now.time)
-  const areas = [...new Set(spots.map((s) => s.area).filter((a) => a !== undefined))]
+  // 地區按鈕跟著分類走：只列出這個分類裡有的地區，並標數量
+  const inCategory = spots.filter((s) => !category || s.category === category)
+  const areaCounts = new Map<string, number>()
+  for (const s of inCategory) if (s.area) areaCounts.set(s.area, (areaCounts.get(s.area) ?? 0) + 1)
+  const areas = [...areaCounts.keys()]
+  // 換了分類、原本選的地區在這個分類裡沒有：當作沒選
+  const activeArea = area && areaCounts.has(area) ? area : undefined
   const hasHours = spots.some((s) => s.open?.length)
   const shown = spots
-    .filter((s) => (!category || s.category === category) && (!area || s.area === area) && (!openOnly || status(s) === 'open'))
+    .filter((s) => (!category || s.category === category) && (!activeArea || s.area === activeArea) && (!openOnly || status(s) === 'open'))
     .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
   const firstSlot = (s: Spot) => {
     const slot = scheduled.get(s.id)?.[0]
@@ -208,8 +214,8 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
               )}
               {areas.length > 1 &&
                 areas.map((a) => (
-                  <FilterChip key={a} active={area === a} onClick={() => setArea(area === a ? undefined : a)}>
-                    {a}
+                  <FilterChip key={a} active={activeArea === a} onClick={() => setArea(activeArea === a ? undefined : a)}>
+                    {a} {areaCounts.get(a)}
                   </FilterChip>
                 ))}
             </div>

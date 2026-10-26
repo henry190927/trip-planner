@@ -113,17 +113,25 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
 /** 行程項目下方的備案：平常收起來，遇到狀況（scenario）時自動展開對應的那幾個 */
 export default function Alternatives({ item, date, trip, scenario }: { item: Item; date: string; trip: Trip; scenario?: Trigger }) {
   const alts = item.alternatives ?? []
-  const [open, setOpen] = useState(false)
+  // 使用者手動打開或收起過就照他的；沒動過時，遇到狀況（scenario）有對應的備案就自動展開
+  const [override, setOverride] = useState<'open' | 'closed'>()
+  const [lastScenario, setLastScenario] = useState(scenario)
+  if (scenario !== lastScenario) {
+    setLastScenario(scenario)
+    setOverride(undefined)
+  }
   if (!alts.length) return null
-  const matching = scenario ? alts.map((a, i) => ({ a, i })).filter(({ a }) => a.trigger === scenario && !a.original) : []
-  const expanded = open || matching.length > 0
-  const shown = matching.length > 0 && !open ? matching : alts.map((a, i) => ({ a, i }))
+  const all = alts.map((a, i) => ({ a, i }))
+  const matching = scenario ? all.filter(({ a }) => a.trigger === scenario && !a.original) : []
+  const expanded = override ? override === 'open' : matching.length > 0
+  // 自動展開時只列對應的；手動打開就列全部
+  const shown = override === 'open' || !matching.length ? all : matching
 
   return (
     <div className="mt-3">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setOverride(expanded ? 'closed' : 'open')}
         aria-expanded={expanded}
         className="inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1.5 text-xs font-bold text-ink active:scale-95"
       >

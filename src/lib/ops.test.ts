@@ -101,7 +101,7 @@ describe('地點清單', () => {
     const r = applyOps(seoul2026, [
       {
         op: 'update_spot',
-        ref: '미쓰족발 홍대',
+        ref: '미쓰족발 홍대본점',
         spotChanges: { hours: '12:30–24:00', open: [{ days: [6], from: '12:30', to: '24:00' }], checkedAt: '2026-10-27', verify: null },
       },
     ])
@@ -114,7 +114,11 @@ describe('地點清單', () => {
 
   it('還排在行程裡、或被備案用到的地點不能直接刪；沒人用的口袋名單可以', () => {
     expect(applyOps(seoul2026, [{ op: 'remove_spot', ref: 'miss-jokbal' }]).errors[0]).toContain('還排在行程裡')
-    expect(applyOps(seoul2026, [{ op: 'remove_spot', ref: '一片里肌 弘大總店' }]).errors[0]).toContain('是其他項目的備案')
+    const backup = applyOps(seoul2026, [
+      { op: 'add_alternative', date: day2, title: 'MISS 豬腳宵夜', alternative: { trigger: 'closed', title: '改喝咖啡', spotId: 'mega-coffee' } },
+      { op: 'remove_spot', ref: 'MEGA COFFEE 弘大入口站店' },
+    ])
+    expect(backup.errors[0]).toContain('是其他項目的備案')
     const r = applyOps(seoul2026, [
       { op: 'add_spot', spot: pocket },
       { op: 'remove_spot', ref: '測試咖啡' },
@@ -143,7 +147,7 @@ describe('備案', () => {
   const withAlts = () =>
     applyOps(bare, [
       { op: 'add_alternative', ...jokbal, alternative: { trigger: 'full', title: '外帶回住宿吃', note: '問「포장 돼요?」' } },
-      { op: 'add_alternative', ...jokbal, alternative: { trigger: 'closed', title: '改吃一片里肌', time: '21:00', spotId: 'ilpyeon-deungsim' } },
+      { op: 'add_alternative', ...jokbal, alternative: { trigger: 'closed', title: '改去 MEGA COFFEE', time: '21:00', spotId: 'mega-coffee' } },
     ])
 
   it('加備案會記在項目上，修改紀錄寫出觸發條件', () => {
@@ -194,14 +198,14 @@ describe('備案', () => {
     const a = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
     const b = applyOps(a, [{ op: 'use_alternative', date: day2, title: '外帶回住宿吃', index: 1 }])
     expect(b.errors).toEqual([])
-    const now = item(b.trip, '改吃一片里肌')
-    expect(now).toMatchObject({ time: '21:00', spotId: 'ilpyeon-deungsim', usedAlternative: { trigger: 'closed' } })
+    const now = item(b.trip, '改去 MEGA COFFEE')
+    expect(now).toMatchObject({ time: '21:00', spotId: 'mega-coffee', usedAlternative: { trigger: 'closed' } })
     expect(now.alternatives!.map((x) => [x.title, x.trigger, x.original ?? false])).toEqual([
       ['MISS 豬腳宵夜', 'other', true],
       ['外帶回住宿吃', 'full', false],
     ])
     const list = titles(b.trip, day2)
-    expect(list.indexOf('改吃一片里肌')).toBeLessThan(list.indexOf('一起搭地鐵回弘大') + 2)
+    expect(list.indexOf('改去 MEGA COFFEE')).toBeLessThan(list.indexOf('一起搭地鐵回弘大') + 2)
   })
 
   it('刪除備案；原本的安排不能刪；編號不存在會回報', () => {

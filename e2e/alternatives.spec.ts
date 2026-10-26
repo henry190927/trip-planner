@@ -31,7 +31,7 @@ test('遇到狀況：點「下雨」只展開對應的備案，改用之後可�
   await page.getByRole('button', { name: /DAY 2/ }).click()
 
   const bar = page.getByText('遇到狀況？點一下看有哪些備案').locator('..')
-  await expect(bar.getByRole('button')).toHaveText(['客滿 2', '下雨 1', '太累 1', '晚到 1'])
+  await expect(bar.getByRole('button')).toHaveText(['客滿 1', '下雨 1', '太累 1', '晚到 1'])
   await bar.getByRole('button', { name: '下雨 1' }).click()
 
   const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '自由時間：京義線林蔭道・望遠市場' }) })
@@ -43,7 +43,15 @@ test('遇到狀況：點「下雨」只展開對應的備案，改用之後可�
   await expect(card).toBeInViewport()
   await page.screenshot({ path: 'e2e/screenshots/alternatives.png' })
 
-  await card.getByRole('button', { name: '改用這個' }).click()
+  // 自動展開的也收得起來，再打開會列出全部
+  const toggle = card.getByRole('button', { name: /備案 2/ })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(card.getByText('自由時間：逛 AK& 弘大')).toHaveCount(0)
+  await toggle.click()
+  await expect(card.getByText('回住宿休息')).toBeVisible()
+
+  await card.getByRole('button', { name: '改用這個' }).first().click()
   await card.getByRole('button', { name: /確定換成/ }).click()
   await expect(page.getByRole('heading', { name: '自由時間：逛 AK& 弘大' })).toBeVisible()
   expect(sent[0]).toMatchObject({ source: 'manual', ops: [{ op: 'use_alternative', index: 0 }] })

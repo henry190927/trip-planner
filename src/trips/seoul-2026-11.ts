@@ -34,7 +34,12 @@ const musinsaStandard: Place = {
   local: '무신사 스탠다드 홍대',
   mapQuery: '무신사 스탠다드 홍대',
 }
-const jokbal: Place = { name: 'MISS 豬腳 弘大店', local: '미쓰족발 홍대', mapQuery: '미쓰족발 홍대' }
+const jokbal: Place = {
+  name: 'MISS 豬腳 弘大店',
+  local: '미쓰족발 홍대본점',
+  addressLocal: ['서울 마포구', '동교동 164-12 1층', '미쓰족발 홍대본점'],
+  mapQuery: '미쓰족발 홍대',
+}
 
 const joseonHwaro: Place = {
   name: '朝鮮火爐烤肉 (조선화로구이)',
@@ -96,16 +101,26 @@ const spots: Spot[] = [
     place: jokbal,
     category: 'food',
     area: '弘大',
+    hours: '12:30–24:00（最後點餐 23:00）',
     tags: ['豬腳', '宵夜'],
-    verify: hoursUnknown,
+    checkedAt: '2026-10-27',
+    verify: '依 Kakao Map，只看到週二、週三的時間；11/7（六）出發前再確認一次',
   },
   {
-    id: 'ilpyeon-deungsim',
-    place: { name: '一片里肌 弘大總店', local: '일편등심 홍대본점', mapQuery: '일편등심 홍대본점' },
-    category: 'food',
+    id: 'mega-coffee',
+    place: { name: 'MEGA COFFEE 弘大入口站店', local: '메가커피 홍대입구역점', mapQuery: '메가커피 홍대입구역점' },
+    category: 'cafe',
     area: '弘大',
-    tags: ['韓牛', '燒肉'],
-    verify: hoursUnknown,
+    tags: ['咖啡', '連鎖店', '平價'],
+    note: '弘大商圈的平價咖啡連鎖，適合逛街逛累了快速補給。',
+  },
+  {
+    id: 'mega-coffee-2',
+    place: { name: 'MEGA COFFEE 發山站店', local: '메가커피 발산역점', mapQuery: '메가커피 발산역점' },
+    category: 'cafe',
+    area: 'KBS Arena 周邊',
+    tags: ['咖啡', '連鎖店', '平價'],
+    note: 'KBS Arena 附近、發山站的平價咖啡，適合演唱會前或散場後短暫休息。',
   },
   {
     id: 'mangwon-market',
@@ -306,15 +321,6 @@ export const seoul2026: Trip = {
           title: '午餐・韓牛燒肉「朝鮮火爐烤肉」',
           place: joseonHwaro,
           spotId: 'joseon-hwaro',
-          alternatives: [
-            {
-              trigger: 'full',
-              title: '午餐・改吃「一片里肌」',
-              spotId: 'ilpyeon-deungsim',
-              place: { name: '一片里肌 弘大總店', local: '일편등심 홍대본점', mapQuery: '일편등심 홍대본점' },
-              note: '同一區的韓牛燒肉，在地點清單的口袋名單裡。',
-            },
-          ],
         },
         {
           time: '13:00',
