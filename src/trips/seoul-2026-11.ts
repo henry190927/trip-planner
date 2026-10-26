@@ -139,7 +139,7 @@ export const seoul2026: Trip = {
   id: 'seoul-2026-11',
   title: '首爾',
   subtitle: '南優鉉《植木日 VI》',
-  emoji: '🌱',
+  icon: 'sprout',
   timezone: 'Asia/Seoul',
   startDate: '2026-11-06',
   endDate: '2026-11-08',
@@ -183,7 +183,7 @@ export const seoul2026: Trip = {
       from: { code: 'ICN', name: '仁川機場', terminal: 'T1', time: '10:40', tzLabel: '首爾' },
       to: { code: 'TPE', name: '桃園機場', terminal: 'T1', time: '12:35', tzLabel: '台北' },
       notes: [
-        '⚠️ 去程降落 T2，回程從 T1 出發。AREX 往機場方向會先停 T1，記得在 T1 下車。',
+        '注意：去程降落 T2，回程從 T1 出發。AREX 往機場方向會先停 T1，記得在 T1 下車。',
         '回程買了周邊和衣服鞋子，記得在住宿先秤重：托運 15kg、手提 10kg。',
       ],
     },
@@ -696,7 +696,7 @@ export const seoul2026: Trip = {
           steps: [
             '07:20 出門，步行到弘大入口站，跟著「공항철도 Airport Railroad」指標走。',
             '刷卡進站，搭往「인천공항 Incheon Airport」方向的普通列車（約 07:35 那班）。',
-            '⚠️ 在「인천공항1터미널（第 1 航廈）」下車：濟州航空在 T1，不要坐到終點 T2。',
+            '注意：在「인천공항1터미널（第 1 航廈）」下車：濟州航空在 T1，不要坐到終點 T2。',
             '約 08:30 抵達，從 B1 搭電扶梯上 3F 出境大廳，找濟州航空報到櫃檯。',
           ],
           pros: ['時間最準', '週日早上車廂空'],

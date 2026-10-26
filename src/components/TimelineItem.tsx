@@ -1,6 +1,7 @@
 import {
   BedDouble,
   Camera,
+  Hourglass,
   Lock,
   ChevronRight,
   ClipboardList,
@@ -103,7 +104,12 @@ export default function TimelineItem({
         <h3 className={`mt-1 font-extrabold leading-snug ${Art ? 'pr-14' : ''}`}>{item.title}</h3>
         {item.place?.local && <p className="text-xs font-bold text-mute">{item.place.local}</p>}
         {item.note && <p className="mt-1.5 text-sm leading-relaxed text-mute">{item.note}</p>}
-        {item.verify && <p className="mt-2 text-xs font-bold text-[#a8661c]">⏳ {item.verify}</p>}
+        {item.verify && (
+          <p className="mt-2 flex gap-1 text-xs font-bold text-[#a8661c]">
+            <Hourglass className="mt-px size-3.5 shrink-0" />
+            {item.verify}
+          </p>
+        )}
 
         {(item.place || item.routeId) && (
           <div className="mt-3 flex flex-wrap gap-2">
