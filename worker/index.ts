@@ -1,7 +1,8 @@
 import { opsSchema, tripSchema } from '../src/schema'
 import { validateTrip } from '../src/lib/validate'
 import { applyOps } from '../src/lib/ops'
-import { runAgent, type ChatEvent, type ChatMessage } from './agent'
+import { runAgent, type ChatEvent, type ChatImage, type ChatMessage } from './agent'
+import { imageError } from './images'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 import { loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
@@ -65,14 +66,22 @@ function geminiMessage(e: unknown) {
 }
 
 async function chat(req: Request, env: Env, cors: Record<string, string>) {
-  const body = (await req.json().catch(() => null)) as { tripId?: string; messages?: ChatMessage[] } | null
+  const body = (await req.json().catch(() => null)) as { tripId?: string; messages?: (ChatMessage & { images?: ChatImage[] })[] } | null
   const stored = body?.tripId ? await loadTrip(env, body.tripId) : undefined
   if (!stored) return json({ error: '找不到這個行程' }, 404, cors)
-  const messages = (body?.messages ?? [])
+  const messages: ChatMessage[] = (body?.messages ?? [])
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
     .slice(-12)
     .map((m) => ({ role: m.role, text: m.text.slice(0, 2000) }))
   if (messages.at(-1)?.role !== 'user') return json({ error: '最後一則要是使用者的訊息' }, 400, cors)
+  // 圖片只收最後一則的；之前附過的不重傳
+  const raw = body?.messages?.at(-1)?.images
+  const images = Array.isArray(raw) ? raw : []
+  if (images.length) {
+    const error = imageError(images)
+    if (error) return json({ error }, 400, cors)
+    messages[messages.length - 1].images = images.map((i) => ({ mimeType: i.mimeType, data: i.data }))
+  }
 
   const { readable, writable } = new TransformStream<Uint8Array>()
   const writer = writable.getWriter()

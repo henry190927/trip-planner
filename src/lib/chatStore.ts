@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { safeStorage, usePrefs } from './store'
 import { ApiError, applyManual, applyProposal, chat, checkPasscode, undoLast, type Proposal, type Source } from './api'
 import { useTrips } from './tripStore'
+import type { PreparedImage } from './images'
 
 export interface ProposalState {
   proposal: Proposal
@@ -20,6 +21,8 @@ export interface Message {
   proposals?: ProposalState[]
   error?: string
   streaming?: boolean
+  /** 使用者附的圖（只存縮圖，原圖只在送出那一次上傳） */
+  images?: string[]
 }
 
 interface ChatState {
@@ -33,7 +36,7 @@ interface ChatState {
   /** 在畫面上直接改（不經過小樹），例如啟用備案；需要通關密語 */
   applyDirect: (tripId: string, ops: unknown[], summary: string) => Promise<void>
   login: (passcode: string) => Promise<void>
-  send: (tripId: string, text: string) => Promise<void>
+  send: (tripId: string, text: string, images?: PreparedImage[]) => Promise<void>
   stop: () => void
   apply: (tripId: string, messageId: string, proposalId: string) => Promise<void>
   dismiss: (tripId: string, messageId: string, proposalId: string) => void
@@ -72,17 +75,21 @@ export const useChat = create<ChatState>()(
           set({ passcode })
         },
 
-        send: async (tripId, text) => {
+        send: async (tripId, text, images = []) => {
           const { passcode } = get()
           if (!passcode || get().busy) return
           const history = (get().threads[tripId] ?? []).filter((m) => m.text.trim() && !m.error)
-          const user: Message = { id: uid(), role: 'user', text }
+          const user: Message = { id: uid(), role: 'user', text, ...(images.length && { images: images.map((i) => i.thumb) }) }
           const reply: Message = { id: uid(), role: 'assistant', text: '', streaming: true }
           set((s) => ({ busy: true, threads: { ...s.threads, [tripId]: [...(s.threads[tripId] ?? []), user, reply] } }))
 
           controller = new AbortController()
           try {
-            const messages = [...history, user].map((m) => ({ role: m.role, text: m.text }))
+            // 之前附過的圖不重傳，只告訴模型那裡有圖
+            const messages = [
+              ...history.map((m) => ({ role: m.role, text: m.images?.length ? `${m.text}\n（當時附了 ${m.images.length} 張圖）` : m.text })),
+              { role: user.role, text, images: images.map(({ mimeType, data }) => ({ mimeType, data })) },
+            ]
             for await (const e of chat(passcode, tripId, messages, controller.signal)) {
               patch(tripId, reply.id, (m) => {
                 switch (e.type) {

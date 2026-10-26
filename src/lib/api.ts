@@ -94,7 +94,7 @@ export const undoLast = (passcode: string, tripId: string) =>
 export async function* chat(
   passcode: string,
   tripId: string,
-  messages: { role: 'user' | 'assistant'; text: string }[],
+  messages: { role: 'user' | 'assistant'; text: string; images?: { mimeType: string; data: string }[] }[],
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   if (!API_BASE) throw new ApiError(0, '沒有設定後端網址')

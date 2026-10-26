@@ -23,9 +23,16 @@ export interface Proposal {
   baseVersion: number
 }
 
+export interface ChatImage {
+  mimeType: string
+  /** base64 */
+  data: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
+  images?: ChatImage[]
 }
 
 const MAX_STEPS = 6
@@ -187,6 +194,7 @@ function systemPrompt(trip: Trip) {
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
 - 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
+- 使用者附的圖片多半是地圖 App 的截圖（營業時間、地址、公休）、菜單或票券。從截圖讀到的營業時間可以填進地點的 hours 與 open，checkedAt 填今天，note 註明「依使用者提供的截圖」，並拿掉對應的 verify；看不清楚或被切掉的部分不要猜，照實說。
 - 回答時不要提到資料欄位名稱（例如 tentative、verify、routeId），用一般說法（「暫定」「待確認」）。
 - 你推薦但使用者還沒決定的項目設 tentative: true；沒有查證到的資訊（例如營業時間）寫進 verify。
 - 時間用 HH:MM、旅程當地時間；日期用 YYYY-MM-DD，必須在旅程期間內。
@@ -251,7 +259,10 @@ export function searchDigest(results: SearchResult[]) {
 const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
 
 export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void) {
-  const contents: Content[] = messages.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] }))
+  const contents: Content[] = messages.map((m) => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    parts: [{ text: m.text }, ...(m.images ?? []).map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.data } }))],
+  }))
   const searched: SearchResult[] = []
   const onRetry = () => emit({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
 
