@@ -12,7 +12,7 @@ interface PrefsState {
 }
 
 // localStorage 在私密瀏覽或被封鎖時會丟例外，存不了就只留在記憶體
-const safeStorage = createJSONStorage(() => {
+export const safeStorage = createJSONStorage(() => {
   try {
     localStorage.setItem('__probe', '1')
     localStorage.removeItem('__probe')
