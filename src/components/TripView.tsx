@@ -8,6 +8,7 @@ import RoutesView from './RoutesView'
 import InfoView from './InfoView'
 import ChecklistView from './ChecklistView'
 import ChatSheet from './ChatSheet'
+import ActivityBell from './ActivityBell'
 
 const nav: { tab: Tab; label: string; Icon: typeof CalendarDays }[] = [
   { tab: 'plan', label: '行程', Icon: CalendarDays },
@@ -39,6 +40,7 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
               {formatDate(trip.startDate, false)} – {formatDate(trip.endDate, false)}・{status}
             </p>
           </div>
+          <ActivityBell trip={trip} />
         </div>
       </header>
 
@@ -51,7 +53,7 @@ export default function TripView({ trip, tab, focus }: { trip: Trip; tab: Tab; f
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
           >
-            {tab === 'plan' && <DayView trip={trip} now={now} phase={phase} />}
+            {tab === 'plan' && <DayView trip={trip} now={now} phase={phase} focus={focus} />}
             {tab === 'routes' && <RoutesView trip={trip} focus={focus} />}
             {tab === 'info' && <InfoView trip={trip} />}
             {tab === 'list' && <ChecklistView trip={trip} />}

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { safeStorage } from './store'
+import { safeStorage, usePrefs } from './store'
 import { ApiError, applyProposal, chat, checkPasscode, undoLast, type Proposal, type Source } from './api'
 import { useTrips } from './tripStore'
 
@@ -118,7 +118,9 @@ export const useChat = create<ChatState>()(
           patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'applying', error: undefined }))
           try {
             const result = await applyProposal(passcode, tripId, target.proposal)
-            useTrips.getState().replace({ version: result.version, trip: result.trip })
+            useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
+            // 自己套用的不用再通知自己
+            usePrefs.getState().markSeen(tripId, result.version)
             patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'applied', version: result.version }))
           } catch (e) {
             patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'failed', error: errorText(e) }))
@@ -132,7 +134,8 @@ export const useChat = create<ChatState>()(
           const { passcode } = get()
           if (!passcode) throw new Error('需要通關密語')
           const result = await undoLast(passcode, tripId)
-          useTrips.getState().replace({ version: result.version, trip: result.trip })
+          useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
+          usePrefs.getState().markSeen(tripId, result.version)
           return result.summary
         },
 

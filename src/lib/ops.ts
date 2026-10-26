@@ -9,6 +9,8 @@ export type Op = z.infer<typeof opSchema>
 export interface Change {
   kind: 'add' | 'update' | 'remove'
   text: string
+  /** 行程項目的變動才有：是哪一天，通知可以直接跳過去 */
+  date?: string
 }
 
 export interface ApplyResult {
@@ -66,7 +68,7 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           break
         }
         day.items.push(op.item)
-        changes.push({ kind: 'add', text: label(op.date, op.item) })
+        changes.push({ kind: 'add', text: label(op.date, op.item), date: op.date })
         break
       }
       case 'update_item': {
@@ -92,7 +94,7 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           const show = (v: unknown) => (typeof v === 'string' ? v : v === undefined ? '（無）' : '已修改')
           return k === 'time' || k === 'end' || k === 'title' ? `${fieldNames[k] ?? k} ${show(from)} → ${show(to)}` : (fieldNames[k] ?? k)
         })
-        changes.push({ kind: 'update', text: `${label(op.date, before as Item)}：${fields.join('、')}` })
+        changes.push({ kind: 'update', text: `${label(op.date, before as Item)}：${fields.join('、')}`, date: op.date })
         break
       }
       case 'remove_item': {
@@ -107,7 +109,7 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           break
         }
         const [removed] = day.items.splice(found.index!, 1)
-        changes.push({ kind: 'remove', text: label(op.date, removed) })
+        changes.push({ kind: 'remove', text: label(op.date, removed), date: op.date })
         break
       }
       case 'add_checklist_item': {

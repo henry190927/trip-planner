@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-// 只存這支手機自己的偏好：看誰的行程、清單勾了哪些
+// 只存這支手機自己的偏好：看誰的行程、清單勾了哪些、行程動態看到哪一版
 interface PrefsState {
   /** tripId → 只看某位旅伴（undefined = 全部） */
   viewer: Record<string, string | undefined>
   /** tripId → 已勾選的清單項目 id */
   checked: Record<string, string[]>
+  /** tripId → 行程動態已經看到第幾版 */
+  seen: Record<string, number>
   setViewer: (tripId: string, travelerId: string | undefined) => void
+  markSeen: (tripId: string, version: number) => void
   toggleChecked: (tripId: string, itemId: string) => void
 }
 
@@ -32,6 +35,8 @@ export const usePrefs = create<PrefsState>()(
     (set) => ({
       viewer: {},
       checked: {},
+      seen: {},
+      markSeen: (tripId, version) => set((s) => (version > (s.seen[tripId] ?? -1) ? { seen: { ...s.seen, [tripId]: version } } : s)),
       setViewer: (tripId, travelerId) => set((s) => ({ viewer: { ...s.viewer, [tripId]: travelerId } })),
       toggleChecked: (tripId, itemId) =>
         set((s) => {

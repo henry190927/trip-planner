@@ -10,7 +10,9 @@ const ops = [{ op: 'add_item' as const, date: '2026-11-07', item: { time: '11:00
 async function mockApi(page: Page) {
   let version = 0
   let current = seoul2026
-  await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current }] } }))
+  // 一開始就有一筆舊紀錄：第一次打開時它會被當成看過，之後才測得出「自己套用不通知自己」
+  let log = [{ version: 0, at: '2026-10-20T01:00:00Z', source: 'sync', summary: '從程式碼同步', changes: [] }]
+  await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log }] } }))
   await page.route(`${API}/api/auth`, (r) =>
     r.request().headers().authorization === 'Bearer letmein' ? r.fulfill({ json: { ok: true } }) : r.fulfill({ status: 401, json: { error: '通關密語不對' } }),
   )
@@ -29,7 +31,8 @@ async function mockApi(page: Page) {
   await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
     current = applyOps(current, ops).trip
     version += 1
-    return r.fulfill({ json: { version, trip: current, changes: [] } })
+    log = [{ version, at: new Date().toISOString(), source: 'ai', summary: '新增延南洞咖啡廳', changes: [] }, ...log]
+    return r.fulfill({ json: { version, trip: current, changes: [], log } })
   })
 }
 
@@ -57,6 +60,8 @@ test('通關密語 → 聊天 → 套用修改 → 行程上看得到', async ({
 
   await dialog.getByRole('button', { name: '套用' }).click()
   await expect(dialog.getByText('已套用到行程')).toBeVisible()
+  // 自己套用的修改不用通知自己
+  await expect(page.getByRole('button', { name: /^行程動態/ })).toHaveAccessibleName('行程動態')
   await dialog.getByRole('button', { name: '關閉' }).click()
 
   await page.getByRole('button', { name: /11\/7/ }).click()

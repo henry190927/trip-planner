@@ -6,6 +6,14 @@ export const API_BASE = import.meta.env.VITE_API_BASE as string | undefined
 export interface Change {
   kind: 'add' | 'update' | 'remove'
   text: string
+  date?: string
+}
+export interface LogEntry {
+  version: number
+  at: string
+  source: 'ai' | 'undo' | 'sync'
+  summary: string
+  changes: Change[]
 }
 export interface Source {
   title: string
@@ -56,6 +64,8 @@ async function request<T>(path: string, init: RequestInit & { passcode?: string 
 export interface Versioned {
   version: number
   trip: Trip
+  /** 最近的變動紀錄，新的在前（舊的快取裡沒有） */
+  log?: LogEntry[]
 }
 
 export const fetchTrips = () => request<{ trips: Versioned[] }>('/api/trips', { cache: 'no-store' })
