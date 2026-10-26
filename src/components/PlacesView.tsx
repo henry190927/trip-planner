@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Clock, MessageCircle, TrainFront } from 'lucide-react'
+import { Clock, Coffee, Landmark, MessageCircle, ShoppingBag, Sparkles, TrainFront, UtensilsCrossed, type LucideIcon } from 'lucide-react'
 import type { Spot, SpotCategory, Trip } from '../types'
 import { useChat } from '../lib/chatStore'
 import { formatDate } from '../lib/dates'
@@ -10,12 +10,13 @@ import type { ZonedNow } from '../lib/time'
 import { Card, Chip, MapButton, Verify } from './ui'
 import { Bowl } from './illustrations'
 
-const categories: Record<SpotCategory, { label: string; emoji: string }> = {
-  food: { label: '吃', emoji: '🍜' },
-  cafe: { label: '咖啡・飲料', emoji: '☕' },
-  shopping: { label: '逛', emoji: '🛍️' },
-  sight: { label: '景點', emoji: '📍' },
-  other: { label: '其他', emoji: '✨' },
+// 分類用線條圖示與網站的色票，不用系統 emoji（各平台長得不一樣）
+const categories: Record<SpotCategory, { label: string; Icon: LucideIcon; tint: string }> = {
+  food: { label: '吃', Icon: UtensilsCrossed, tint: 'bg-peach/50 text-peach-ink' },
+  cafe: { label: '咖啡・飲料', Icon: Coffee, tint: 'bg-butter text-[#a8661c]' },
+  shopping: { label: '逛', Icon: ShoppingBag, tint: 'bg-sky/40 text-sky-ink' },
+  sight: { label: '景點', Icon: Landmark, tint: 'bg-[linear-gradient(135deg,var(--sky),var(--peach))] text-ink' },
+  other: { label: '其他', Icon: Sparkles, tint: 'bg-cream text-mute' },
 }
 const order = Object.keys(categories) as SpotCategory[]
 
@@ -27,6 +28,16 @@ const openBadge: Record<Exclude<OpenStatus, 'unknown'>, { label: string; tone: '
 interface Scheduled {
   date: string
   time?: string
+}
+
+function CategoryLabel({ category, count }: { category: SpotCategory; count: number }) {
+  const { Icon, label } = categories[category]
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Icon className="size-3.5" />
+      {label} {count}
+    </span>
+  )
 }
 
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
@@ -48,8 +59,8 @@ function SpotCard({ spot, trip, slots, status, highlighted }: { spot: Spot; trip
   return (
     <Card id={`spot-${spot.id}`} className={highlighted ? 'ring-2 ring-peach' : ''}>
       <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-cream text-xl" aria-hidden>
-          {cat.emoji}
+        <span className={`flex size-11 shrink-0 items-center justify-center rounded-2xl ${cat.tint}`} aria-label={cat.label}>
+          <cat.Icon className="size-5" strokeWidth={2.2} />
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="font-black leading-snug">{spot.place.name}</h3>
@@ -181,7 +192,7 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
               .filter((c) => spots.some((s) => s.category === c))
               .map((c) => (
                 <FilterChip key={c} active={category === c} onClick={() => setCategory(category === c ? undefined : c)}>
-                  {categories[c].emoji} {categories[c].label} {spots.filter((s) => s.category === c).length}
+                  <CategoryLabel category={c} count={spots.filter((s) => s.category === c).length} />
                 </FilterChip>
               ))}
           </div>
@@ -189,7 +200,10 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
             <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">
               {hasHours && (
                 <FilterChip active={openOnly} onClick={() => setOpenOnly(!openOnly)}>
-                  🕒 現在營業中
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="size-3.5" />
+                    現在營業中
+                  </span>
                 </FilterChip>
               )}
               {areas.length > 1 &&
