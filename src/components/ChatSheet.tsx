@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowUp, Check, Globe, LoaderCircle, Minus, Pencil, Plus, RotateCcw, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, Copy, Globe, LoaderCircle, Minus, Pencil, Plus, RotateCcw, Square, Trash2, X } from 'lucide-react'
 import type { Trip } from '../types'
 import { API_BASE } from '../lib/api'
 import { useChat, type Message, type ProposalState } from '../lib/chatStore'
 import { Sprout, Sparkle } from './illustrations'
+import { conversationText, copyText, messageText } from '../lib/chatText'
 import RichText from './RichText'
 import { gradient } from './ui'
 
@@ -93,12 +94,34 @@ function ProposalCard({ p, onApply, onDismiss }: { p: ProposalState; onApply: ()
   )
 }
 
+function CopyButton({ text, label, className = '', iconOnly = false }: { text: () => string; label: string; className?: string; iconOnly?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const onClick = async () => {
+    if (await copyText(text())) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void onClick()}
+      aria-label={copied ? '已複製' : label}
+      className={`inline-flex items-center gap-1 rounded-full text-[11px] font-bold text-mute active:bg-cream ${className}`}
+    >
+      {copied ? <Check className="size-3.5 text-sky-ink" /> : <Copy className="size-3.5" />}
+      {copied && !iconOnly && <span className="text-sky-ink">已複製</span>}
+    </button>
+  )
+}
+
 function Bubble({ m, tripId }: { m: Message; tripId: string }) {
   const apply = useChat((s) => s.apply)
   const dismiss = useChat((s) => s.dismiss)
   if (m.role === 'user')
     return (
-      <div className="flex justify-end">
+      <div className="flex items-end justify-end gap-1">
+        <CopyButton text={() => messageText(m)} label="複製這則訊息" className="mb-1 p-1.5" />
         <p className="max-w-[85%] whitespace-pre-wrap rounded-3xl rounded-br-lg bg-peach px-4 py-2.5 text-sm font-bold leading-relaxed">
           {m.text}
         </p>
@@ -143,6 +166,7 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
           />
         ))}
         {m.error && <p className="mt-2 rounded-2xl bg-peach/40 px-3 py-2 text-xs font-bold text-peach-ink">{m.error}</p>}
+        {!m.streaming && m.text && <CopyButton text={() => messageText(m)} label="複製回覆" className="mt-1 px-1.5 py-1" />}
       </div>
     </div>
   )
@@ -288,6 +312,9 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                   <button type="button" onClick={() => void onUndo()} aria-label="復原上一次修改" className="flex size-9 items-center justify-center rounded-full bg-cream">
                     <RotateCcw className="size-4" />
                   </button>
+                )}
+                {messages.length > 0 && !busy && (
+                  <CopyButton text={() => conversationText(messages)} label="複製整段對話" className="size-9 justify-center bg-cream text-ink" iconOnly />
                 )}
                 {messages.length > 0 && !busy && (
                   <button type="button" onClick={() => clear(trip.id)} aria-label="清除對話" className="flex size-9 items-center justify-center rounded-full bg-cream">
