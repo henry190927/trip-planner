@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Env } from './env'
-import { searchMany } from './search'
+import { keepResult, searchMany } from './search'
 
 const env = { TAVILY_API_KEY: 'tvly-test' } as Env
 
@@ -43,5 +43,38 @@ describe('searchMany', () => {
     expect(found.queries).toEqual(['A', 'B', 'C', 'D'])
     expect(found.sources.filter((s) => s.url === 'https://same.example')).toHaveLength(1)
     expect(found.sources.length).toBeLessThanOrEqual(8)
+  })
+})
+
+describe('keepResult', () => {
+  const q = '일편등심 홍대 네이버 예약'
+
+  it('擋掉成人網站（網域或標題）', () => {
+    expect(keepResult(q, { title: 'Pornhub Videos & Streaming', url: 'https://www.pornhub.com/x', content: '일편등심' })).toBe(false)
+    expect(keepResult(q, { title: 'pornhub videos - XVIDEOS.COM', url: 'https://spam.example/일편등심', content: '일편등심' })).toBe(false)
+    expect(keepResult(q, { title: 'Videos Porno y Películas', url: 'https://es.spam.example/', content: '일편등심 홍대' })).toBe(false)
+  })
+
+  it('擋掉跟店名完全無關的結果，只提到通用字（홍대、예약）不算相關', () => {
+    expect(keepResult(q, { title: '홍대 맛집 BEST 10', url: 'https://blog.example/a', content: '홍대 예약 필수' })).toBe(false)
+  })
+
+  it('留下正常的店家頁面，店名出現在標題、內容或（編碼過的）網址都算', () => {
+    expect(keepResult(q, { title: '일편등심 홍대본점 — 홍대 한우', url: 'https://k.example/a', content: '' })).toBe(true)
+    expect(keepResult(q, { title: 'Hongdae beef', url: 'https://k.example/a', content: '일편등심은 …' })).toBe(true)
+    expect(keepResult(q, { title: 'place', url: `https://m.place.naver.com/${encodeURIComponent('일편등심')}`, content: '' })).toBe(true)
+  })
+
+  it('地圖與訂位網站即使標題沒寫店名也留下', () => {
+    expect(keepResult(q, { title: '네이버 지도', url: 'https://map.naver.com/p/entry/place/34565224', content: '' })).toBe(true)
+    expect(keepResult(q, { title: 'NAVER', url: 'https://m.place.naver.com/restaurant/34565224', content: '' })).toBe(true)
+  })
+
+  it('搜尋字詞全是通用字時，用那些字判斷', () => {
+    expect(keepResult('홍대 맛집', { title: '홍대 맛집 추천', url: 'https://blog.example/a', content: '' })).toBe(true)
+  })
+
+  it('「成人票」這類正常用法不會被擋', () => {
+    expect(keepResult('AREX 직통열차 요금', { title: 'AREX 직통열차 요금 성인 11,000원', url: 'https://arex.example/', content: '' })).toBe(true)
   })
 })

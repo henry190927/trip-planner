@@ -8,9 +8,57 @@ export interface Source {
   url: string
 }
 
+// 有些垃圾或成人網站會在頁面塞滿熱門的店名與關鍵字，搜尋結果偶爾會混進來。
+// 三道過濾：送出時排除已知網域、收回時擋成人字眼、再擋跟搜尋字詞完全無關的結果。
+const BLOCKED_DOMAINS = ['pornhub.com', 'xvideos.com', 'xnxx.com', 'xhamster.com', 'redtube.com', 'youporn.com', 'onlyfans.com', 'spankbang.com']
+// 「성인」「成人」不列入：票價、門票頁常用來指成人票
+const ADULT = /porn|xvideo|xnxx|xhamster|redtube|youporn|spankbang|onlyfans|hentai|\bsex|\bxxx|야동|섹스|色情|情色|av女優/i
+// 地圖與訂位網站的頁面標題常常不寫店名（例如只有「네이버 지도」），不做相關性檢查
+const TRUSTED_DOMAINS = ['map.naver.com', 'place.naver.com', 'naver.me', 'map.kakao.com', 'place.map.kakao.com', 'google.com', 'catchtable.co.kr', 'tablelog.co.kr']
+// 這些字幾乎每個結果都有，不能拿來判斷相關性
+const GENERIC = /^(홍대|홍대입구|서울|영업시간|예약|네이버|맛집|주소|위치|메뉴|가격|弘大|首爾|營業時間|地址|訂位|預約|價格|菜單|naver|map|seoul|hongdae|open|hours|menu|price|reservation)$/i
+
+function keywords(query: string) {
+  const words = query.toLowerCase().split(/[\s,，、/()（）「」]+/).filter((w) => w.length >= 2)
+  const specific = words.filter((w) => !GENERIC.test(w))
+  return specific.length ? specific : words
+}
+
+interface RawResult {
+  title?: string
+  url?: string
+  content?: string
+}
+
+/** 留下看起來正常、而且跟搜尋字詞有關的結果 */
+export function keepResult(query: string, r: RawResult) {
+  if (!r.url) return false
+  const host = (() => {
+    try {
+      return new URL(r.url).hostname.replace(/^www\./, '')
+    } catch {
+      return ''
+    }
+  })()
+  if (!host || BLOCKED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))) return false
+  if (ADULT.test(`${r.title ?? ''} ${r.url}`)) return false
+  if (TRUSTED_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))) return true
+  const haystack = `${r.title ?? ''} ${decodeURIComponentSafe(r.url)} ${r.content ?? ''}`.toLowerCase()
+  const words = keywords(query)
+  return words.length === 0 || words.some((k) => haystack.includes(k))
+}
+
+function decodeURIComponentSafe(s: string) {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return s
+  }
+}
+
 interface TavilyResponse {
   answer?: string
-  results?: { title?: string; url?: string; content?: string }[]
+  results?: RawResult[]
 }
 
 export class SearchError extends Error {}
@@ -21,13 +69,15 @@ export async function searchWeb(env: Env, query: string, signal?: AbortSignal) {
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ query, search_depth: 'basic', max_results: 5, include_answer: 'basic' }),
+    body: JSON.stringify({ query, search_depth: 'basic', max_results: 6, include_answer: 'basic', exclude_domains: BLOCKED_DOMAINS }),
     signal,
   })
   if (res.status === 401) console.error(`Tavily key 長度 ${key.length}，${key.startsWith('tvly-') ? '' : '不是 '}tvly- 開頭`)
   if (!res.ok) throw new SearchError(`Tavily ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const data = (await res.json()) as TavilyResponse
-  const results = (data.results ?? []).filter((r) => r.url)
+  const all = data.results ?? []
+  const results = all.filter((r) => keepResult(query, r))
+  if (results.length < all.length) console.log(`search「${query}」過濾掉 ${all.length - results.length} 筆：`, all.filter((r) => !results.includes(r)).map((r) => r.url))
   return {
     answer: data.answer ?? '',
     results: results.map((r) => ({ title: r.title ?? '', url: r.url!, snippet: (r.content ?? '').slice(0, 600) })),
