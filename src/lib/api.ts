@@ -96,12 +96,14 @@ export async function* chat(
   tripId: string,
   messages: { role: 'user' | 'assistant'; text: string; images?: { mimeType: string; data: string }[] }[],
   signal?: AbortSignal,
+  /** 「看誰的行程」選的人：別人的私人小任務不會給小樹看 */
+  viewer?: string,
 ): AsyncGenerator<ChatEvent> {
   if (!API_BASE) throw new ApiError(0, '沒有設定後端網址')
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${passcode}` },
-    body: JSON.stringify({ tripId, messages }),
+    body: JSON.stringify({ tripId, messages, viewer }),
     signal,
   })
   if (!res.ok || !res.body) {

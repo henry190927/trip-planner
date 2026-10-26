@@ -1,5 +1,7 @@
 import {
+  ArrowRight,
   BedDouble,
+  EyeOff,
   Camera,
   Hourglass,
   Lock,
@@ -17,6 +19,7 @@ import { Chip, MapButton, WhoChip } from './ui'
 import DriverCard from './DriverCard'
 import Alternatives, { TriggerChip } from './Alternatives'
 import { isFixed } from '../lib/plan'
+import TaskCheck from './TaskCheck'
 import { Bowl, Lightstick, ShoppingBag as BagArt } from './illustrations'
 
 const kinds: Record<ItemKind, { Icon: typeof Plane; bg: string }> = {
@@ -88,6 +91,12 @@ export default function TimelineItem({
           {who?.map((t) => <WhoChip key={t.id} traveler={t} />)}
           {item.tzLabel && <Chip>{item.tzLabel}時間</Chip>}
           {item.tentative && <Chip tone="warn">建議</Chip>}
+          {item.private && (
+            <Chip tone="peach">
+              <EyeOff className="size-3" />
+              私人
+            </Chip>
+          )}
           {isFixed(item) && (
             <Chip>
               <Lock className="size-3" />
@@ -101,7 +110,27 @@ export default function TimelineItem({
             </span>
           )}
         </div>
-        <h3 className={`mt-1 font-extrabold leading-snug ${Art ? 'pr-14' : ''}`}>{item.title}</h3>
+        {item.todo ? (
+          <div className={`mt-1 flex flex-wrap items-start gap-2 ${Art ? 'pr-14' : ''}`}>
+            <TaskCheck item={item} date={date} trip={trip} />
+            <div className="min-w-0 flex-1">
+              <h3 className={`font-extrabold leading-snug ${item.todo.done ? 'text-mute line-through' : ''}`}>{item.title}</h3>
+              {item.todo.done && item.todo.doneAt && (
+                <p className="text-[11px] font-bold text-sky-ink">
+                  {new Date(item.todo.doneAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: trip.timezone })} 完成
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <h3 className={`mt-1 font-extrabold leading-snug ${Art ? 'pr-14' : ''}`}>{item.title}</h3>
+        )}
+        {item.for && (
+          <p className="mt-1 flex items-center gap-1 text-xs font-bold text-mute">
+            <ArrowRight className="size-3.5" />
+            為了：{item.for.time}「{item.for.title}」
+          </p>
+        )}
         {item.place?.local && <p className="text-xs font-bold text-mute">{item.place.local}</p>}
         {item.note && <p className="mt-1.5 text-sm leading-relaxed text-mute">{item.note}</p>}
         {item.verify && (

@@ -2,6 +2,7 @@ import type { Trip } from '../types'
 import { formatDate } from './dates'
 import { isFixed } from './plan'
 import type { ZonedNow } from './time'
+import { canSee } from './visibility'
 
 // 旅行中聊天框的快捷按鈕：按了先把一段話填進輸入框（附上現在時間與下一個固定行程），使用者可以改了再送
 
@@ -13,7 +14,7 @@ export interface QuickAction {
 export function quickActions(trip: Trip, now: ZonedNow, viewer?: string): QuickAction[] {
   const day = trip.days.find((d) => d.date === now.date)
   if (!day) return []
-  const mine = day.items.filter((i) => i.time && !i.tzLabel && (!viewer || !i.who || i.who.includes(viewer)))
+  const mine = day.items.filter((i) => i.time && !i.tzLabel && canSee(i, viewer))
   const current = mine.filter((i) => i.time! <= now.time).at(-1)
   const nextFixed = mine.find((i) => i.time! > now.time && isFixed(i))
   const me = viewer ? trip.travelers.find((t) => t.id === viewer)?.name : undefined

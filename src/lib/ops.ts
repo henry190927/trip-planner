@@ -37,8 +37,9 @@ function sortItems(items: Item[]) {
     .map((x) => x.item)
 }
 
-const label = (date: string, item: Pick<Item, 'time' | 'title'>) =>
-  `${formatDate(date, false)}${item.time ? ` ${item.time}` : ''}「${item.title}」`
+// 私人小任務在修改紀錄裡不寫標題（兩個人都看得到紀錄）
+const label = (date: string, item: Pick<Item, 'time' | 'title' | 'private'>) =>
+  `${formatDate(date, false)}${item.time ? ` ${item.time}` : ''}${item.private ? '的私人小任務' : `「${item.title}」`}`
 
 const fieldNames: Record<string, string> = {
   time: '時間',
@@ -54,6 +55,9 @@ const fieldNames: Record<string, string> = {
   tzLabel: '時區',
   spotId: '地點清單',
   fixed: '固定',
+  todo: '小任務',
+  for: '為了哪個行程',
+  private: '私人',
 }
 
 const spotFieldNames: Record<string, string> = {
@@ -278,6 +282,26 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           text: chosen.original ? `${before} 換回原本的安排：「${chosen.title}」` : `${before} 改用備案（${triggerLabels[chosen.trigger]}）：「${chosen.title}」`,
           date: op.date,
         })
+        break
+      }
+      case 'complete_task': {
+        const day = dayOf(op.date)
+        if (!day) {
+          errors.push(`旅程裡沒有 ${op.date} 這一天`)
+          break
+        }
+        const found = findItem(day, op.title, op.time)
+        if ('error' in found) {
+          errors.push(found.error!)
+          break
+        }
+        const item = day.items[found.index!]
+        if (!item.todo) {
+          errors.push(`${label(op.date, item)} 不是小任務`)
+          break
+        }
+        item.todo = op.done ? { done: true, doneAt: new Date().toISOString() } : { done: false }
+        changes.push({ kind: 'update', text: `${label(op.date, item)}${op.done ? '：完成' : '：改回還沒完成'}`, date: op.date })
         break
       }
       case 'shift_items': {

@@ -90,7 +90,7 @@ export const useChat = create<ChatState>()(
               ...history.map((m) => ({ role: m.role, text: m.images?.length ? `${m.text}\n（當時附了 ${m.images.length} 張圖）` : m.text })),
               { role: user.role, text, images: images.map(({ mimeType, data }) => ({ mimeType, data })) },
             ]
-            for await (const e of chat(passcode, tripId, messages, controller.signal)) {
+            for await (const e of chat(passcode, tripId, messages, controller.signal, usePrefs.getState().viewer[tripId])) {
               patch(tripId, reply.id, (m) => {
                 switch (e.type) {
                   case 'text':

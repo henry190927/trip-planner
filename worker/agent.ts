@@ -1,6 +1,7 @@
 import { itemKinds, opsSchema, spotCategories, triggers } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import { freeWindows } from '../src/lib/plan'
+import { hidePrivate } from '../src/lib/visibility'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
 import { GeminiError, streamGenerate, type Content, type Part } from './gemini'
@@ -64,6 +65,14 @@ const itemProps = {
   verify: str('出發前還要確認的事，例如「營業時間待確認」'),
   spotId: str('對應地點清單裡的地點 id'),
   fixed: { type: 'boolean', description: '時間不能動的行程（班機、演唱會預設就是）' },
+  todo: {
+    type: 'object',
+    properties: { done: { type: 'boolean' } },
+    required: ['done'],
+    description: '小任務才填：{ done: false }',
+  },
+  for: { type: 'object', properties: { time: str('HH:MM'), title: str() }, required: ['title'], description: '小任務是為了哪個行程' },
+  private: { type: 'boolean', description: '驚喜用的私人小任務，只有負責人看得到' },
 }
 const openRange = {
   type: 'object',
@@ -162,6 +171,7 @@ const tools = [
                       'remove_alternative',
                       'use_alternative',
                       'shift_items',
+                      'complete_task',
                     ],
                   },
                   date: str('YYYY-MM-DD'),
@@ -173,6 +183,7 @@ const tools = [
                   until: str('shift_items：挪到幾點為止（不含）；省略 = 下一個固定行程之前'),
                   minutes: { type: 'integer', description: 'shift_items：挪幾分鐘，正數往後延、負數提前' },
                   who: str('shift_items：只挪某位旅伴自己的項目時填旅伴 id'),
+                  done: { type: 'boolean', description: 'complete_task：true 完成、false 改回還沒完成' },
                   item: { type: 'object', properties: itemProps, required: ['kind', 'title'], description: 'add_item 的新項目' },
                   changes: {
                     type: 'object',
@@ -205,12 +216,14 @@ function todayIn(timeZone: string) {
   return new Intl.DateTimeFormat('en-CA', { timeZone, dateStyle: 'short', timeStyle: 'short', hourCycle: 'h23' }).format(new Date())
 }
 
-function systemPrompt(trip: Trip) {
+function systemPrompt(trip: Trip, viewer?: string) {
+  const me = viewer ? trip.travelers.find((t) => t.id === viewer) : undefined
   return `你是「旅行手帖」的旅行小幫手「小樹」，幫一對旅伴規劃與調整這趟旅程。
 
 # 規則
 - 一律用繁體中文（台灣用語）回答，口氣親切、簡潔，手機上好讀；不要用表格，也不要用 emoji。
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
+- 現在用這支手機的是：${me ? `「${me.name}」（id: ${me.id}）` : '還沒選（兩個人都可能）'}。
 - 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。要查好幾件事（例如三間店的營業時間）時，一次呼叫放多個 queries，不要一件一件查。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
 - 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
@@ -230,6 +243,8 @@ function systemPrompt(trip: Trip) {
 - 使用者說遇到狀況（「客滿了」「下雨了」「早到了」）時，先看那個項目有沒有對應的備案；有的話建議用 use_alternative 直接換，沒有再找新的。
 - 固定行程（班機、演唱會、fixed 為 true 的項目）時間不能動。行程有延誤或提早時，用 shift_items 把彈性項目整段挪動（一定要填 from 與 minutes，例如 { op: 'shift_items', date, from: '12:00', minutes: 30 }），預設只挪到下一個固定行程之前；挪不動（會撞到固定行程）時，改建議刪掉或縮短某個彈性項目，或改用備案。
 - 算空檔、來不來得及時先呼叫 find_free_time，不要自己做時間加減。
+- 小任務是某個人要順手完成的事（例如先外帶宵夜回住宿）：kind 用 task，todo 填 { done: false }，who 填負責人，time–end 是可以做的時間範圍，for 寫是為了哪個行程。調整行程時看到可以順路處理的事，可以提議建立小任務。
+- 驚喜類的小任務設 private: true，只有負責人看得到；建立私人小任務時，回答也不要寫出會被另一個人看到的細節。標成完成用 complete_task。
 - 項目的 usedAlternative 代表目前用的是備案；備案清單裡 original 為 true 的是原本的安排，換回去也是 use_alternative。
 
 # 目前的行程資料（JSON）
@@ -281,7 +296,9 @@ export function searchDigest(results: SearchResult[]) {
 
 const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
 
-export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void) {
+export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void, viewer?: string) {
+  // 別人的私人小任務不給模型看，免得說溜嘴；修改還是套在完整的行程上
+  const visible = hidePrivate(stored.trip, viewer)
   const contents: Content[] = messages.map((m) => ({
     role: m.role === 'user' ? 'user' : 'model',
     parts: [{ text: m.text }, ...(m.images ?? []).map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.data } }))],
@@ -295,7 +312,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       for await (const chunk of streamGenerate(
         env,
         {
-          systemInstruction: { parts: [{ text: systemPrompt(stored.trip) }] },
+          systemInstruction: { parts: [{ text: systemPrompt(visible, viewer) }] },
           contents,
           tools,
           generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
@@ -337,7 +354,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           searched.push(...found.results)
         }
       } else if (call.name === 'find_free_time') {
-        const day = stored.trip.days.find((d) => d.date === args.date)
+        const day = visible.days.find((d) => d.date === args.date)
         emit({ type: 'status', text: '計算空檔…' })
         response = day
           ? {
