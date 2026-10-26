@@ -46,9 +46,21 @@ function WhoFilter({ trip }: { trip: Trip }) {
   )
 }
 
-export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNow; phase: TripPhase }) {
-  const [index, setIndex] = useState(() => (phase.kind === 'during' ? Math.min(phase.dayIndex, trip.days.length - 1) : 0))
+export default function DayView({ trip, now, phase, focus }: { trip: Trip; now: ZonedNow; phase: TripPhase; focus?: string }) {
+  const focused = trip.days.findIndex((d) => d.date === focus)
+  const [index, setIndex] = useState(() =>
+    focused >= 0 ? focused : phase.kind === 'during' ? Math.min(phase.dayIndex, trip.days.length - 1) : 0,
+  )
   const [direction, setDirection] = useState(0)
+  // 網址指定了某一天（例如從行程動態點過來）就切過去；之後使用者自己滑動不受影響
+  const [lastFocus, setLastFocus] = useState(focus)
+  if (focus !== lastFocus) {
+    setLastFocus(focus)
+    if (focused >= 0 && focused !== index) {
+      setDirection(focused > index ? 1 : -1)
+      setIndex(focused)
+    }
+  }
   const viewer = usePrefs((s) => s.viewer[trip.id])
   const day = trip.days[index]
   const items = day.items.filter((item) => visibleTo(item, viewer))
@@ -80,6 +92,7 @@ export default function DayView({ trip, now, phase }: { trip: Trip; now: ZonedNo
               <button
                 key={d.date}
                 type="button"
+                aria-pressed={active}
                 onClick={() => go(i)}
                 className={`relative shrink-0 rounded-2xl px-4 py-2 text-left ${active ? 'text-ink' : 'bg-card text-mute'}`}
               >

@@ -4,7 +4,7 @@ import { applyOps } from '../src/lib/ops'
 import { runAgent, type ChatEvent, type ChatMessage } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
-import { loadTrip, saveTrip, tripIds, undo } from './store'
+import { loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
 
 export { GeminiRelay } from './relay-object'
 
@@ -31,6 +31,9 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
       }
     : {}
 }
+
+/** 給網站的部分：parent 是後端內部用的 */
+const published = (s: Stored) => ({ version: s.version, updatedAt: s.updatedAt, trip: s.trip, log: s.log ?? [] })
 
 const json = (data: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } })
@@ -99,7 +102,7 @@ export default {
     try {
       if (req.method === 'GET' && url.pathname === '/api/trips') {
         const all = await Promise.all(tripIds().map((id) => loadTrip(env, id)))
-        return json({ trips: all.filter(Boolean).map((s) => ({ version: s!.version, updatedAt: s!.updatedAt, trip: s!.trip })) }, 200, {
+        return json({ trips: all.filter(Boolean).map((s) => published(s!)) }, 200, {
           ...cors,
           'cache-control': 'no-store',
         })
@@ -125,7 +128,7 @@ export default {
         if (action === 'undo') {
           const next = await undo(env, id, stored)
           if (!next) return json({ error: '沒有可以復原的版本' }, 409, cors)
-          return json({ version: next.version, trip: next.trip, summary: next.summary }, 200, cors)
+          return json({ ...published(next), summary: next.summary }, 200, cors)
         }
 
         if (action === 'replace') {
@@ -134,7 +137,7 @@ export default {
           if (errors.length) return json({ error: '行程資料不正確', details: errors }, 400, cors)
           const trip = tripSchema.parse(body!.trip)
           if (trip.id !== id) return json({ error: '行程 id 不一致' }, 400, cors)
-          const next = await saveTrip(env, id, trip, String(body?.summary ?? '取代行程').slice(0, 200), stored)
+          const next = await saveTrip(env, id, trip, String(body?.summary ?? '取代行程').slice(0, 200), stored, { source: 'sync' })
           return json({ version: next.version }, 200, cors)
         }
 
@@ -144,8 +147,11 @@ export default {
         // 一律套在最新版本上：AI 提案之後若另一個人改過，這裡會重新檢查一次
         const applied = applyOps(stored.trip, parsed.data)
         if (applied.errors.length) return json({ error: '這個修改跟目前的行程對不起來', details: applied.errors }, 409, cors)
-        const next = await saveTrip(env, id, applied.trip, String(body?.summary ?? '修改行程').slice(0, 200), stored)
-        return json({ version: next.version, trip: next.trip, changes: applied.changes }, 200, cors)
+        const next = await saveTrip(env, id, applied.trip, String(body?.summary ?? '修改行程').slice(0, 200), stored, {
+          source: 'ai',
+          changes: applied.changes,
+        })
+        return json({ ...published(next), changes: applied.changes }, 200, cors)
       }
 
       return json({ error: 'Not found' }, 404, cors)

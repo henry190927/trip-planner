@@ -14,7 +14,7 @@ describe('applyOps', () => {
     expect(r.errors).toEqual([])
     const list = titles(r.trip, day2)
     expect(list.indexOf('延南洞咖啡廳')).toBe(list.indexOf('睡飽・早午餐') + 1)
-    expect(r.changes).toEqual([{ kind: 'add', text: '11/7 11:00「延南洞咖啡廳」' }])
+    expect(r.changes).toEqual([{ kind: 'add', text: '11/7 11:00「延南洞咖啡廳」', date: '2026-11-07' }])
   })
 
   it('不會改到原本的資料', () => {
