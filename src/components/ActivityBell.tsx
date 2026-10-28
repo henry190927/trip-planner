@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { Bell, ChevronRight, Minus, Pencil, Plus, RotateCcw, X } from 'lucide-react'
+import { Bell, ChevronRight, Minus, Pencil, Plus, X } from 'lucide-react'
 import type { Trip } from '../types'
 import type { Change, LogEntry } from '../lib/api'
 import { useChat } from '../lib/chatStore'
@@ -11,6 +11,7 @@ import { usePrefs } from '../lib/store'
 import { useTrips } from '../lib/tripStore'
 import { Chip } from './ui'
 import { Sprout } from './illustrations'
+import UndoButton from './UndoButton'
 
 const noLog: LogEntry[] = []
 
@@ -53,11 +54,9 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
   const seen = usePrefs((s) => s.seen[trip.id])
   const markSeen = usePrefs((s) => s.markSeen)
   const passcode = useChat((s) => s.passcode)
-  const undo = useChat((s) => s.undo)
   const [open, setOpen] = useState(false)
   // 打開時記下「之前看到哪」，面板裡才標得出哪些是新的
   const [seenAtOpen, setSeenAtOpen] = useState<number>()
-  const [notice, setNotice] = useState('')
   const latest = log[0]?.version
 
   // 第一次在這台裝置打開：之前的紀錄都算看過，不要一次跳出一大堆
@@ -71,16 +70,6 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
     setSeenAtOpen(seen)
     setOpen(true)
     if (latest !== undefined) markSeen(trip.id, latest)
-  }
-
-  const onUndo = async () => {
-    try {
-      await undo(trip.id)
-      setNotice('已復原這次修改')
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : String(e))
-    }
-    setTimeout(() => setNotice(''), 4000)
   }
 
   return (
@@ -144,7 +133,6 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
                 </header>
 
                 <div className="flex-1 overflow-y-auto px-4 py-3">
-                  {notice && <p className="mb-3 rounded-2xl bg-butter px-3 py-2 text-center text-sm font-bold">{notice}</p>}
                   {log.length === 0 ? (
                     <div className="flex flex-col items-center py-10 text-center">
                       <Sprout className="a-sway w-20" />
@@ -181,16 +169,7 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
                                   ))}
                                 </ul>
                               )}
-                              {i === 0 && passcode && entry.source !== 'sync' && (
-                                <button
-                                  type="button"
-                                  onClick={() => void onUndo()}
-                                  className="mt-2 inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1 text-xs font-bold"
-                                >
-                                  <RotateCcw className="size-3.5" />
-                                  復原這次
-                                </button>
-                              )}
+                              {i === 0 && passcode && entry.source !== 'sync' && <UndoButton tripId={trip.id} summary={entry.summary} />}
                             </div>
                           </motion.li>
                         )
