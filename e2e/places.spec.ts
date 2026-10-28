@@ -112,3 +112,11 @@ test.describe('編輯、刪除、新增地點', () => {
     await expect(page.getByText('已排進行程 6・口袋名單 7')).toBeVisible()
   })
 })
+
+test('手機上點地圖先試著開 App，沒裝 App 就改開網頁版', async ({ page }) => {
+  await page.route('https://map.naver.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>naver web</title>' }))
+  await page.goto(`./${trip}/places`)
+  await page.locator('#spot-miss-jokbal').getByRole('link', { name: /Naver Map/ }).click()
+  // 沒有 App：等一下之後改開網頁版的搜尋
+  await expect(page).toHaveURL(/map\.naver\.com\/p\/search\//, { timeout: 5000 })
+})

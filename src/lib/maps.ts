@@ -12,6 +12,23 @@ export const mapLabel: Record<MapProvider, string> = {
   google: 'Google Maps',
 }
 
+const queryOf = (place: Place) => place.mapQuery ?? place.local ?? place.name
+
+/** 網頁版連結（電腦、或手機沒裝 App 時用） */
 export function mapUrl(provider: MapProvider, place: Place) {
-  return place.mapLink ?? builders[provider](place.mapQuery ?? place.local ?? place.name)
+  return place.mapLink ?? builders[provider](queryOf(place))
 }
+
+// App 的專屬連結：手機上直接打開 App 並搜尋那個地點，不先經過網頁。
+// Google Maps 的 api=1 網址本身在手機上就會開 App，不需要另外處理
+const APP_NAME = 'io.github.henry190927.trip-planner'
+const appBuilders: Partial<Record<MapProvider, (q: string) => string>> = {
+  naver: (q) => `nmap://search?query=${encodeURIComponent(q)}&appname=${APP_NAME}`,
+  kakao: (q) => `kakaomap://search?q=${encodeURIComponent(q)}`,
+}
+
+export function mapAppUrl(provider: MapProvider, place: Place) {
+  return appBuilders[provider]?.(queryOf(place))
+}
+
+export const isPhone = (ua: string) => /iPhone|iPad|iPod|Android/i.test(ua)
