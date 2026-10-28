@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { MapPin } from 'lucide-react'
 import type { MapProvider, Place, Traveler } from '../types'
-import { mapLabel, mapUrl } from '../lib/maps'
+import { isPhone, mapAppUrl, mapLabel, mapUrl } from '../lib/maps'
 
 export const gradient = 'bg-[linear-gradient(135deg,var(--sky),var(--peach))]'
 
@@ -48,10 +48,24 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   )
 }
 
+/** 手機上先試著直接開地圖 App；沒裝 App（畫面沒有切走）就改開網頁版 */
+function openMapApp(e: MouseEvent<HTMLAnchorElement>, provider: MapProvider, place: Place) {
+  const app = mapAppUrl(provider, place)
+  if (!app || !isPhone(navigator.userAgent)) return
+  e.preventDefault()
+  const web = mapUrl(provider, place)
+  const fallback = setTimeout(() => {
+    if (document.visibilityState === 'visible') window.location.href = web
+  }, 1500)
+  document.addEventListener('visibilitychange', () => clearTimeout(fallback), { once: true })
+  window.location.href = app
+}
+
 export function MapButton({ provider, place, compact }: { provider: MapProvider; place: Place; compact?: boolean }) {
   return (
     <a
       href={mapUrl(provider, place)}
+      onClick={(e) => openMapApp(e, provider, place)}
       target="_blank"
       rel="noreferrer"
       className="inline-flex items-center gap-1 rounded-full bg-sky/35 px-3 py-1.5 text-xs font-bold text-sky-ink active:scale-95"
