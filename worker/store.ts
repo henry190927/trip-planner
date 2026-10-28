@@ -72,7 +72,10 @@ export async function saveTrip(env: Env, id: string, trip: Trip, summary: string
 
 const inverse: Record<Change['kind'], Change['kind']> = { add: 'remove', remove: 'add', update: 'update' }
 
-/** 回到上一版：把 parent 那一版的內容存成新的一版（歷史只往前長，不刪東西） */
+/**
+ * 復原最新那一次修改：把它之前那一版的內容存成新的一版（歷史只往前長，不刪東西）。
+ * 新的一版的 parent 指回被復原的那一版，所以再按一次復原就是重做，不會一路往前退。
+ */
 export async function undo(env: Env, id: string, current: Stored) {
   if (current.parent === undefined) return undefined
   const target = await env.TRIPS.get<Stored>(versionKey(id, current.parent), 'json')
@@ -82,6 +85,6 @@ export async function undo(env: Env, id: string, current: Stored) {
   return saveTrip(env, id, target.trip, `復原：${current.summary}`, current, {
     source: 'undo',
     changes: undone.map((c) => ({ ...c, kind: inverse[c.kind] })),
-    parent: target.parent,
+    parent: current.version,
   })
 }

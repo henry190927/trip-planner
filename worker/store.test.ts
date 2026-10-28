@@ -40,6 +40,21 @@ describe('變動紀錄', () => {
     expect(v2.log!.map((e) => e.version)).toEqual([2, 1])
   })
 
+  it('連按復原不會一路往前退：第二次復原等於重做，內容跟紀錄一致', async () => {
+    const env = fakeEnv()
+    const v0 = (await loadTrip(env, id))!
+    const sync = await saveTrip(env, id, { ...v0.trip, title: '同步過' }, '從程式碼同步', v0, { source: 'sync' })
+    const withItem = await saveTrip(env, id, { ...sync.trip, title: '加了東西' }, '加東西', sync, { source: 'ai', changes: [added] })
+    const u1 = (await undo(env, id, withItem))!
+    expect(u1.trip.title).toBe('同步過')
+    const u2 = (await undo(env, id, u1))!
+    // 重做：回到加了東西的狀態，不是退回同步之前
+    expect(u2.trip.title).toBe('加了東西')
+    expect(u2.log![0].changes).toEqual([added])
+    const u3 = (await undo(env, id, u2))!
+    expect(u3.trip.title).toBe('同步過')
+  })
+
   it('最多留 50 筆', async () => {
     const env = fakeEnv()
     let cur = (await loadTrip(env, id))!
