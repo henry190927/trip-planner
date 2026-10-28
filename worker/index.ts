@@ -92,6 +92,8 @@ async function chat(req: Request, env: Env, cors: Record<string, string>) {
   const enc = new TextEncoder()
   const emit = (e: ChatEvent) => void writer.write(enc.encode(`data: ${JSON.stringify(e)}\n\n`))
 
+  // 等模型的時候可能好幾十秒沒有資料；定時送心跳，連線才不會被當成閒置而切斷（SSE 註解行，網站會忽略）
+  const heartbeat = setInterval(() => void writer.write(enc.encode(': ping\n\n')), 15_000)
   const work = (async () => {
     try {
       // 只認得行程裡的旅伴 id
@@ -101,6 +103,7 @@ async function chat(req: Request, env: Env, cors: Record<string, string>) {
       console.error(e)
       emit({ type: 'error', text: geminiMessage(e) })
     }
+    clearInterval(heartbeat)
     emit({ type: 'done' })
     await writer.close()
   })()

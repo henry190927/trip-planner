@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trips } from '../src/trips'
-import { normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
+import { checkAgentOps, normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -163,5 +163,46 @@ describe('私人小任務不給小樹看', () => {
     expect(bodies[1]).not.toContain('偷偷外帶豬腳')
     expect(bodies[2]).toContain('偷偷外帶豬腳')
     expect(bodies[0]).toContain('現在用這支手機的是：「她」')
+  })
+})
+
+describe('checkAgentOps', () => {
+  const spot = (extra: Record<string, unknown> = {}) => ({ op: 'add_spot', spot: { place: { name: '橋村炸雞', mapLink: 'https://naver.me/fake' }, category: 'food', ...extra } })
+
+  it('新地點沒有地區就退回', () => {
+    expect(checkAgentOps([spot()], new Set()).problems[0]).toContain('要填 area')
+    expect(checkAgentOps([spot({ area: '弘大' })], new Set()).problems).toEqual([])
+  })
+
+  it('地圖連結只留搜尋結果或使用者給的；其他拿掉並說明', () => {
+    const ops = [spot({ area: '弘大' })]
+    const r = checkAgentOps(ops, new Set(['https://naver.me/real']))
+    expect((ops[0].spot.place as { mapLink?: string }).mapLink).toBeUndefined()
+    expect(r.notes[0]).toContain('https://naver.me/fake')
+    const kept = [spot({ area: '弘大' })]
+    checkAgentOps(kept, new Set(['https://naver.me/fake']))
+    expect((kept[0].spot.place as { mapLink?: string }).mapLink).toBe('https://naver.me/fake')
+  })
+})
+
+describe('說了「套用」卻沒有產生修改', () => {
+  it('最後補一句說明，免得使用者找不到按鈕', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const { env } = fakeEnv([() => sse([{ text: '幫你加好了，請按套用。' }])])
+    const { events } = await run(env)
+    const text = events.filter((e) => e.type === 'text').map((e) => e.delta).join('')
+    expect(text).toContain('沒有成功產生修改')
+  })
+
+  it('有產生修改就不補', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const op = { op: 'add_spot', spot: { place: { name: '測試炸雞' }, category: 'food', area: '弘大' } }
+    const { env } = fakeEnv([
+      () => sse([{ functionCall: { name: 'propose_changes', args: { summary: '加炸雞', operations: [op] } } }]),
+      () => sse([{ text: '請按套用。' }]),
+    ])
+    const { events } = await run(env)
+    expect(events.some((e) => e.type === 'proposal')).toBe(true)
+    expect(events.filter((e) => e.type === 'text').map((e) => e.delta).join('')).not.toContain('沒有成功產生修改')
   })
 })

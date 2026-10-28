@@ -190,3 +190,18 @@ test('復原要再確認一次，寫出復原的是哪一次修改', async ({ pa
   await page.getByRole('button', { name: /DAY 2/ }).click()
   await expect(page.getByRole('heading', { name: '延南洞咖啡廳 TEST' })).toHaveCount(0)
 })
+
+test('串流沒收到結束訊號就斷了：明講連線中斷', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
+  await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
+  await page.route(`${API}/api/chat`, (r) =>
+    r.fulfill({ contentType: 'text/event-stream', body: `: ping\n\ndata: ${JSON.stringify({ type: 'text', delta: '我查到了，弘大有' })}\n\n` }),
+  )
+  await page.goto(`./${trip}`)
+  await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+  const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
+  await dialog.getByRole('textbox', { name: '訊息' }).fill('弘大炸雞')
+  await dialog.getByRole('button', { name: '送出' }).click()
+  await expect(dialog.getByText('我查到了，弘大有')).toBeVisible()
+  await expect(dialog.getByText('連線中斷了，回覆可能不完整，可以再問一次。')).toBeVisible()
+})

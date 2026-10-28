@@ -90,7 +90,9 @@ export const useChat = create<ChatState>()(
               ...history.map((m) => ({ role: m.role, text: m.images?.length ? `${m.text}\n（當時附了 ${m.images.length} 張圖）` : m.text })),
               { role: user.role, text, images: images.map(({ mimeType, data }) => ({ mimeType, data })) },
             ]
+            let finished = false
             for await (const e of chat(passcode, tripId, messages, controller.signal, usePrefs.getState().viewer[tripId])) {
+              if (e.type === 'done') finished = true
               patch(tripId, reply.id, (m) => {
                 switch (e.type) {
                   case 'text':
@@ -108,6 +110,9 @@ export const useChat = create<ChatState>()(
                 }
               })
             }
+            // 沒收到結束訊號就斷了（手機切到背景、網路不穩）：明講，不要讓回覆看起來像說完了
+            if (!finished)
+              patch(tripId, reply.id, (m) => ({ ...m, error: m.error ?? '連線中斷了，回覆可能不完整，可以再問一次。' }))
           } catch (e) {
             if (!(e instanceof DOMException && e.name === 'AbortError')) {
               patch(tripId, reply.id, (m) => ({ ...m, error: errorText(e) }))
