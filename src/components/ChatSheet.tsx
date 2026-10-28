@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, RotateCcw, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, Square, Trash2, X } from 'lucide-react'
 import type { Trip } from '../types'
 import { API_BASE } from '../lib/api'
 import { useChat, type Message, type ProposalState } from '../lib/chatStore'
@@ -11,6 +11,8 @@ import { quickActions } from '../lib/quickActions'
 import { usePrefs } from '../lib/store'
 import { useNow } from '../lib/time'
 import RichText from './RichText'
+import UndoButton from './UndoButton'
+import { useTrips } from '../lib/tripStore'
 import { gradient } from './ui'
 
 const suggestions = [
@@ -50,7 +52,10 @@ const changeIcon = {
   remove: { Icon: Minus, cls: 'bg-peach/60 text-peach-ink' },
 }
 
-function ProposalCard({ p, onApply, onDismiss }: { p: ProposalState; onApply: () => void; onDismiss: () => void }) {
+function ProposalCard({ p, tripId, onApply, onDismiss }: { p: ProposalState; tripId: string; onApply: () => void; onDismiss: () => void }) {
+  // 只有這次修改還是最新的一版時，復原才會復原到它
+  const latest = useTrips((s) => s.byId[tripId]?.version)
+  const [undone, setUndone] = useState(false)
   const done = p.state === 'applied' || p.state === 'dismissed'
   return (
     <div className={`mt-2 rounded-2xl border-2 p-3 ${p.state === 'applied' ? 'border-sky bg-sky/15' : 'border-butter bg-card'}`}>
@@ -72,10 +77,18 @@ function ProposalCard({ p, onApply, onDismiss }: { p: ProposalState; onApply: ()
       {p.error && <p className="mt-2 text-xs font-bold text-peach-ink">{p.error}</p>}
       <div className="mt-3 flex gap-2">
         {p.state === 'applied' && (
-          <p className="inline-flex items-center gap-1 text-sm font-black text-sky-ink">
-            <Check className="size-4" strokeWidth={3} />
-            已套用到行程
-          </p>
+          <div>
+            <p className="inline-flex items-center gap-1 text-sm font-black text-sky-ink">
+              <Check className="size-4" strokeWidth={3} />
+              已套用到行程
+            </p>
+            {undone ? (
+              <p className="mt-2 text-xs font-bold text-mute">已復原，行程回到這次修改之前</p>
+            ) : (
+              p.version !== undefined &&
+              p.version === latest && <UndoButton tripId={tripId} summary={p.proposal.summary} onDone={() => setUndone(true)} />
+            )}
+          </div>
         )}
         {p.state === 'dismissed' && <p className="text-sm font-bold text-mute">沒有套用</p>}
         {!done && (
@@ -171,6 +184,7 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
         )}
         {m.proposals?.map((p) => (
           <ProposalCard
+            tripId={tripId}
             key={p.proposal.id}
             p={p}
             onApply={() => void apply(tripId, m.id, p.proposal.id)}
@@ -235,13 +249,11 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     setOpen(true)
     setInput(draft.text)
   }
-  const [notice, setNotice] = useState('')
   const passcode = useChat((s) => s.passcode)
   const messages = useChat((s) => s.threads[trip.id]) ?? []
   const busy = useChat((s) => s.busy)
   const send = useChat((s) => s.send)
   const stop = useChat((s) => s.stop)
-  const undo = useChat((s) => s.undo)
   const clear = useChat((s) => s.clear)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -252,7 +264,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
   const [preparing, setPreparing] = useState(false)
   const [attachError, setAttachError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
-  const hasApplied = messages.some((m) => m.proposals?.some((p) => p.state === 'applied'))
 
   // 有新內容（訊息、串流文字、搜尋狀態、修改建議）時捲到最底
   const last = messages.at(-1)
@@ -309,16 +320,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     void send(trip.id, t, attachments)
   }
 
-  const onUndo = async () => {
-    try {
-      const summary = await undo(trip.id)
-      setNotice(`已復原上一次修改（${summary.replace(/^復原：/, '')}）`)
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : String(e))
-    }
-    setTimeout(() => setNotice(''), 4000)
-  }
-
   return (
     <>
       <motion.button
@@ -363,11 +364,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                   <p className="font-black leading-tight">小樹</p>
                   <p className="text-[11px] font-bold text-mute">會上網查資料・改行程前先問你</p>
                 </div>
-                {hasApplied && (
-                  <button type="button" onClick={() => void onUndo()} aria-label="復原上一次修改" className="flex size-9 items-center justify-center rounded-full bg-cream">
-                    <RotateCcw className="size-4" />
-                  </button>
-                )}
                 {messages.length > 0 && !busy && (
                   <CopyButton text={() => conversationText(messages)} label="複製整段對話" className="size-9 justify-center bg-cream text-ink" iconOnly />
                 )}
@@ -381,7 +377,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                 </button>
               </header>
 
-              {notice && <p className="mx-4 mt-2 rounded-2xl bg-sky/30 px-3 py-2 text-xs font-bold text-sky-ink">{notice}</p>}
 
               {!passcode ? (
                 <PasscodeGate />

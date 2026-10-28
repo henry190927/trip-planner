@@ -34,6 +34,15 @@ async function mockApi(page: Page) {
     log = [{ version, at: new Date().toISOString(), source: 'ai', summary: '新增延南洞咖啡廳', changes: [] }, ...log]
     return r.fulfill({ json: { version, trip: current, changes: [], log } })
   })
+  let undos = 0
+  await page.route(`${API}/api/trips/seoul-2026-11/undo`, (r) => {
+    undos += 1
+    current = seoul2026
+    version += 1
+    log = [{ version, at: new Date().toISOString(), source: 'undo', summary: '復原：新增延南洞咖啡廳', changes: [] }, ...log]
+    return r.fulfill({ json: { version, trip: current, summary: '復原：新增延南洞咖啡廳', log } })
+  })
+  return { undos: () => undos }
 }
 
 test('通關密語 → 聊天 → 套用修改 → 行程上看得到', async ({ page }) => {
@@ -156,4 +165,28 @@ test('附圖：在手機上縮成 JPEG 才上傳，下一則訊息不重傳', as
   expect(second.at(-1)!.images ?? []).toHaveLength(0)
   expect(second[0].text).toContain('當時附了 1 張圖')
   expect(second.some((m) => m.images?.length)).toBe(false)
+})
+
+test('復原要再確認一次，寫出復原的是哪一次修改', async ({ page }) => {
+  const api = await mockApi(page)
+  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'letmein', threads: {} }, version: 1 })))
+  await page.goto(`./${trip}`)
+  await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+  const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
+  // 右上角不再有容易跟重新整理搞混的圖示
+  await expect(dialog.getByRole('button', { name: '復原上一次修改' })).toHaveCount(0)
+  await dialog.getByRole('textbox', { name: '訊息' }).fill('加咖啡廳')
+  await dialog.getByRole('button', { name: '送出' }).click()
+  await dialog.getByRole('button', { name: '套用' }).click()
+  await expect(dialog.getByText('已套用到行程')).toBeVisible()
+
+  await dialog.getByRole('button', { name: '復原這次修改' }).click()
+  expect(api.undos()).toBe(0)
+  await expect(dialog.getByText('確定要復原「新增延南洞咖啡廳」嗎？')).toBeVisible()
+  await dialog.getByRole('button', { name: '復原', exact: true }).click()
+  await expect(dialog.getByText('已復原，行程回到這次修改之前')).toBeVisible()
+  expect(api.undos()).toBe(1)
+  await dialog.getByRole('button', { name: '關閉' }).click()
+  await page.getByRole('button', { name: /DAY 2/ }).click()
+  await expect(page.getByRole('heading', { name: '延南洞咖啡廳 TEST' })).toHaveCount(0)
 })
