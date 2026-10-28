@@ -225,7 +225,8 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
 - 現在用這支手機的是：${me ? `「${me.name}」（id: ${me.id}）` : '還沒選（兩個人都可能）'}。
 - 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。要查好幾件事（例如三間店的營業時間）時，一次呼叫放多個 queries，不要一件一件查。
-- 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。
+- 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。呼叫 propose_changes 之前不要提到「套用」按鈕；等工具回傳 ok: true 之後，才請使用者按「套用」。
+- 地圖連結（mapLink）只能用搜尋結果裡真的出現過、或使用者貼的網址，不要自己組 Naver 連結；沒有就只填 local 與 mapQuery（用當地語言的完整店名，分店名也寫上，地圖 App 才搜得到正確的那間）。
 - 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
 - 使用者附的圖片多半是地圖 App 的截圖（營業時間、地址、公休）、菜單或票券。從截圖讀到的營業時間可以填進地點的 hours 與 open，checkedAt 填今天，note 註明「依使用者提供的截圖」，並拿掉對應的 verify；看不清楚或被切掉的部分不要猜，照實說。
@@ -294,6 +295,32 @@ export function searchDigest(results: SearchResult[]) {
   ].join('\n\n')
 }
 
+/**
+ * 送出修改前，在程式裡把規則做實（光寫在提示裡模型不一定照做）：
+ * - 新地點一定要有地區
+ * - 地圖連結只能用搜尋結果裡出現過、或使用者自己貼的網址；其他的（多半是模型編的）拿掉，改用店名搜尋
+ */
+export function checkAgentOps(raw: unknown, allowedLinks: Set<string>) {
+  const problems: string[] = []
+  const notes: string[] = []
+  const stripLink = (place: unknown) => {
+    const p = place as { mapLink?: unknown } | null | undefined
+    if (p && typeof p === 'object' && typeof p.mapLink === 'string' && !allowedLinks.has(p.mapLink)) {
+      notes.push(`地圖連結 ${p.mapLink} 不是搜尋結果或使用者給的網址，已拿掉，改用 mapQuery 搜尋`)
+      delete p.mapLink
+    }
+  }
+  if (Array.isArray(raw))
+    for (const op of raw as Record<string, Record<string, unknown> | undefined>[]) {
+      if (!op || typeof op !== 'object') continue
+      if (op.op === ('add_spot' as unknown) && op.spot && !op.spot.area) problems.push(`add_spot「${String((op.spot.place as { name?: string })?.name ?? '')}」要填 area（沿用清單裡已經有的地區叫法）`)
+      for (const holder of [op.spot, op.item, op.alternative, op.changes, op.spotChanges]) if (holder) stripLink(holder.place)
+    }
+  return { problems, notes }
+}
+
+const urlsIn = (text: string) => text.match(/https?:\/\/[^\s)）」]+/g) ?? []
+
 const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
 
 export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void, viewer?: string) {
@@ -305,6 +332,16 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
   }))
   const searched: SearchResult[] = []
   const onRetry = () => emit({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
+  // 系統提示含整份行程，只產生一次（每一步都重新產生很吃 CPU）
+  const prompt = systemPrompt(visible, viewer)
+  // 可以用的地圖連結：使用者貼的、搜尋結果裡出現過的
+  const allowedLinks = new Set(messages.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)))
+  // 說了「套用」卻沒有產生修改時要補一句，免得使用者找不到按鈕
+  let proposals = 0
+  let saidApply = false
+  const finish = () => {
+    if (saidApply && proposals === 0) emit({ type: 'text', delta: '\n\n（剛剛沒有成功產生修改，所以沒有「套用」按鈕；可以再說一次要怎麼改。）' })
+  }
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const parts: Part[] = []
@@ -312,7 +349,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       for await (const chunk of streamGenerate(
         env,
         {
-          systemInstruction: { parts: [{ text: systemPrompt(visible, viewer) }] },
+          systemInstruction: { parts: [{ text: prompt }] },
           contents,
           tools,
           generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
@@ -321,7 +358,10 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       )) {
         for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
           parts.push(part)
-          if (part.text && !part.thought) emit({ type: 'text', delta: part.text })
+          if (part.text && !part.thought) {
+            emit({ type: 'text', delta: part.text })
+            if (part.text.includes('套用')) saidApply = true
+          }
         }
       }
     } catch (e) {
@@ -334,7 +374,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
     contents.push({ role: 'model', parts })
 
     const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall!)
-    if (calls.length === 0) return
+    if (calls.length === 0) return finish()
 
     const responses: Part[] = []
     for (const call of calls) {
@@ -351,6 +391,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           response = { error: '搜尋暫時無法使用。請告訴使用者這次沒能上網查證，憑既有知識回答的部分要標明「未查證」，或建議稍後再問。' }
         } else {
           response = { results: found.results }
+          for (const r of found.results) if ('results' in r) for (const x of r.results) allowedLinks.add(x.url)
           searched.push(...found.results)
         }
       } else if (call.name === 'find_free_time') {
@@ -365,8 +406,12 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
             }
           : { error: `旅程裡沒有 ${String(args.date)} 這一天` }
       } else if (call.name === 'propose_changes') {
-        const parsed = opsSchema.safeParse(normalizeOps(args.operations))
-        if (!parsed.success) {
+        const normalized = normalizeOps(args.operations)
+        const checked = checkAgentOps(normalized, allowedLinks)
+        const parsed = opsSchema.safeParse(normalized)
+        if (checked.problems.length) {
+          response = { ok: false, errors: checked.problems }
+        } else if (!parsed.success) {
           response = {
             ok: false,
             errors: Array.isArray(args.operations)
@@ -388,7 +433,13 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
                 baseVersion: stored.version,
               },
             })
-            response = { ok: true, shownToUser: applied.changes.map((c) => c.text), note: '已顯示給使用者，等使用者按「套用」才會生效。' }
+            proposals += 1
+            response = {
+              ok: true,
+              shownToUser: applied.changes.map((c) => c.text),
+              note: '已顯示給使用者，等使用者按「套用」才會生效。',
+              ...(checked.notes.length && { warnings: checked.notes }),
+            }
           }
         }
         if (!response.ok) {
@@ -403,4 +454,5 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
     contents.push({ role: 'user', parts: responses })
   }
   emit({ type: 'text', delta: '\n（步驟太多先停在這裡，可以再告訴我要繼續。）' })
+  finish()
 }
