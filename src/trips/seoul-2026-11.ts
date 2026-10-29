@@ -38,7 +38,7 @@ const jokbal: Place = {
   name: 'MISS 豬腳 弘大店',
   local: '미쓰족발 홍대본점',
   addressLocal: ['서울 마포구', '동교동 164-12 1층', '미쓰족발 홍대본점'],
-  mapQuery: '미쓰족발 홍대',
+  mapQuery: '미쓰족발 홍대본점',
 }
 
 const joseonHwaro: Place = {
@@ -165,6 +165,25 @@ const spots: Spot[] = [
     area: 'KBS Arena 周邊',
     note: '平價韓式連鎖小吃，豬排跟飯捲都很方便。',
     verify: '地址與營業時間待確認',
+  },
+  // 10/29 用小樹加的
+  {
+    id: 'chung-chung',
+    place: {
+      name: 'Chung Chung 牛仔服飾店 (청청)',
+      local: '청청',
+      address: '15 Hongik-ro 3-gil, Mapo-gu, Seoul',
+      addressLocal: ['서울특별시 마포구 홍익로3길 15'],
+      mapQuery: '홍대 청청',
+    },
+    category: 'shopping',
+    area: '弘大',
+    hours: '12:00–22:00',
+    open: [{ days: [0, 1, 2, 3, 4, 5, 6], from: '12:00', to: '22:00' }],
+    access: '弘大入口站 9 號出口，從 Nike Hongdae 旁小巷進去',
+    tags: ['服飾', '牛仔褲', '弘大逛街'],
+    note: '弘大熱門牛仔褲/服飾專賣店，提供剪裁調腰圍服務。地點在 Nike 旁邊小巷進去。',
+    checkedAt: '2026-10-29',
   },
   {
     id: 'mangwon-market',

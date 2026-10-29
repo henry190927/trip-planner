@@ -5,6 +5,7 @@ import { LoaderCircle, X } from 'lucide-react'
 import type { Spot, SpotCategory, Trip } from '../types'
 import { spotCategories } from '../schema'
 import { useChat } from '../lib/chatStore'
+import { mapLabel } from '../lib/maps'
 import { spotOps, toForm, type SpotForm as Form } from '../lib/spotForm'
 import { gradient } from './ui'
 
@@ -17,12 +18,15 @@ export const categoryLabels: Record<SpotCategory, string> = {
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  // 說明放在 label 外面：欄位名稱只念名稱本身，不把整段說明當成名字
   return (
-    <label className="block">
-      <span className="text-xs font-extrabold text-mute">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-[11px] text-mute">{hint}</span>}
-    </label>
+    <div>
+      <label className="block">
+        <span className="text-xs font-extrabold text-mute">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="mt-1 text-[11px] text-mute">{hint}</p>}
+    </div>
   )
 }
 
@@ -121,8 +125,18 @@ export default function SpotEditor({ trip, spot, open, onClose }: { trip: Trip; 
               <Field label="怎麼去">
                 <input value={form.access} onChange={set('access')} className={inputClass} placeholder="例如：弘大入口站 9 號出口走路 3 分" />
               </Field>
-              <Field label="地圖連結" hint="Naver Map 的分享連結，按「地圖」會直接打開這間">
+              <Field
+                label="地圖連結"
+                hint={
+                  form.mapLink.trim()
+                    ? '按「地圖」會直接打開這個地點'
+                    : `沒填的話，按鈕只能用「${form.mapQuery.trim() || form.local.trim() || form.name.trim() || '名稱'}」搜尋，可能跳到別間分店。要指定確切的那間：在 ${mapLabel[trip.mapProvider]} 打開店家頁 → 分享 → 複製連結，貼在這裡`
+                }
+              >
                 <input value={form.mapLink} onChange={set('mapLink')} className={inputClass} inputMode="url" placeholder="https://naver.me/…" />
+              </Field>
+              <Field label="地圖搜尋用的字" hint="沒有地圖連結時用；寫完整店名（含分店名）比較準">
+                <input value={form.mapQuery} onChange={set('mapQuery')} className={inputClass} placeholder={form.local || form.name} />
               </Field>
               <Field label="標籤" hint="用頓號或逗號分開">
                 <input value={form.tags} onChange={set('tags')} className={inputClass} placeholder="宵夜、可外帶" />

@@ -10,6 +10,10 @@ describe('地圖連結', () => {
     expect(mapAppUrl('google', place)).toBeUndefined()
   })
 
+  it('有確切的地點連結就直接開它，不改成搜尋', () => {
+    expect(mapAppUrl('naver', { ...place, mapLink: 'https://naver.me/abc' })).toBeUndefined()
+  })
+
   it('網頁版：有指定連結就用指定的', () => {
     expect(mapUrl('naver', { ...place, mapLink: 'https://naver.me/abc' })).toBe('https://naver.me/abc')
     expect(mapUrl('google', place)).toContain('api=1')

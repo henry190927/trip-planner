@@ -56,6 +56,8 @@ export default function TimelineItem({
   /** 選了「遇到狀況」時：沒有對應備案的項目淡化 */
   scenario?: Trigger
 }) {
+  // 有連到地點清單就用清單裡那筆（在地點清單補的確切連結，行程卡片上也會用到）
+  const mapPlace = (item.spotId && trip.spots?.find((s) => s.id === item.spotId)?.place) || item.place
   const dimmed = scenario && !item.alternatives?.some((a) => a.trigger === scenario && !a.original)
   const { Icon, bg } = kinds[item.kind]
   const Art = item.tentative ? undefined : accentArt[item.kind]
@@ -142,7 +144,7 @@ export default function TimelineItem({
 
         {(item.place || item.routeId) && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {item.place && <MapButton provider={trip.mapProvider} place={item.place} compact />}
+            {mapPlace && <MapButton provider={trip.mapProvider} place={mapPlace} compact />}
             {item.place && <DriverCard place={item.place} phrase={trip.driverPhrase} />}
             {item.routeId && (
               <a

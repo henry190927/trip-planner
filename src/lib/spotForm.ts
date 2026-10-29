@@ -6,6 +6,7 @@ import { nowIn } from './time'
 export interface SpotForm {
   name: string
   local: string
+  mapQuery: string
   mapLink: string
   category: SpotCategory
   area: string
@@ -20,6 +21,7 @@ export interface SpotForm {
 export const toForm = (s?: Spot): SpotForm => ({
   name: s?.place.name ?? '',
   local: s?.place.local ?? '',
+  mapQuery: s?.place.mapQuery ?? '',
   mapLink: s?.place.mapLink ?? '',
   category: s?.category ?? 'food',
   area: s?.area ?? '',
@@ -44,6 +46,7 @@ export function spotOps(trip: Trip, form: SpotForm, spot?: Spot) {
     ...spot?.place,
     name: form.name.trim(),
     ...(form.local.trim() ? { local: form.local.trim() } : { local: undefined }),
+    ...(form.mapQuery.trim() ? { mapQuery: form.mapQuery.trim() } : { mapQuery: undefined }),
     ...(form.mapLink.trim() ? { mapLink: form.mapLink.trim() } : { mapLink: undefined }),
   }
   // 拿掉值是 undefined 的鍵，資料才乾淨
