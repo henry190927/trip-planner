@@ -10,20 +10,21 @@ test.beforeEach(async ({ page }) => {
 test('列出已排進行程與口袋名單，可以依分類篩選，點「已排入」跳到那一天', async ({ page }) => {
   await page.goto(`./${trip}/places`)
   await expect(page.getByRole('heading', { name: '地點清單' })).toBeVisible()
-  await expect(page.getByText('已排進行程 6・口袋名單 6')).toBeVisible()
+  await expect(page.getByText('已排進行程 6・口袋名單 7')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'MEGA COFFEE 弘大入口站店' })).toBeVisible()
   // 只有換匯機台有營業時段（24 小時）：有「現在營業中」篩選，只有它標營業中，其他沒資料的不亂標
-  await expect(page.getByText('營業中', { exact: true })).toHaveCount(1)
+  await expect(page.getByText(/^(營業中|休息中)$/)).toHaveCount(2)
   await expect(page.locator('#spot-money-planet').getByText('營業中', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /現在營業中/ }).click()
-  await expect(page.locator('section[id^="spot-"]')).toHaveCount(1)
+  // 24 小時的換匯機台一定在；牛仔褲店看當下時間
+  await expect(page.locator('#spot-money-planet')).toBeVisible()
   await page.getByRole('button', { name: /現在營業中/ }).click()
   await page.screenshot({ path: 'e2e/screenshots/places.png' })
 
   await page.getByRole('button', { name: /吃 5/ }).click()
   await expect(page.locator('section[id^="spot-"]')).toHaveCount(5)
   await page.getByRole('button', { name: /全部/ }).click()
-  await expect(page.locator('section[id^="spot-"]')).toHaveCount(12)
+  await expect(page.locator('section[id^="spot-"]')).toHaveCount(13)
 
   // 地區按鈕跟著分類走：咖啡裡只有弘大、KBS 周邊各一間，不會出現空的「望遠」
   await page.getByRole('button', { name: /咖啡・飲料 2/ }).click()
@@ -86,6 +87,24 @@ test.describe('編輯、刪除、新增地點', () => {
     await expect(card.getByText(/確認$/)).toBeVisible()
   })
 
+  test('沒有地圖連結時按鈕寫「搜尋」；貼上分享連結後地點卡片與行程卡片都直接開那個點', async ({ page }) => {
+    await page.goto(`./${trip}/places`)
+    const card = page.locator('#spot-miss-jokbal')
+    await expect(card.getByRole('link', { name: 'Naver Map 搜尋' })).toBeVisible()
+    await card.getByRole('button', { name: /^編輯「/ }).click()
+    const dialog = page.getByRole('dialog', { name: '編輯地點' })
+    await expect(dialog.getByText(/只能用「미쓰족발 홍대본점」搜尋/)).toBeVisible()
+    await dialog.getByLabel('地圖連結').fill('https://naver.me/miss123')
+    await dialog.getByRole('button', { name: '儲存' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(card.getByRole('link', { name: '開 Naver Map' })).toHaveAttribute('href', 'https://naver.me/miss123')
+
+    await page.getByRole('link', { name: '行程', exact: true }).click()
+    await page.getByRole('button', { name: /DAY 2/ }).click()
+    const item = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'MISS 豬腳宵夜' }) })
+    await expect(item.getByRole('link', { name: '地圖', exact: true })).toHaveAttribute('href', 'https://naver.me/miss123')
+  })
+
   test('已排進行程的地點刪不掉，口袋名單的可以', async ({ page }) => {
     await page.goto(`./${trip}/places`)
     const jokbal = page.locator('#spot-miss-jokbal')
@@ -109,7 +128,7 @@ test.describe('編輯、刪除、新增地點', () => {
     await dialog.getByRole('button', { name: '儲存' }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('heading', { name: '測試咖啡' })).toBeVisible()
-    await expect(page.getByText('已排進行程 6・口袋名單 7')).toBeVisible()
+    await expect(page.getByText('已排進行程 6・口袋名單 8')).toBeVisible()
   })
 })
 

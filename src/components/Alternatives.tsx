@@ -45,7 +45,8 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
   const [step, setStep] = useState<'idle' | 'confirm' | 'busy'>('idle')
   const [error, setError] = useState('')
   const spot = alt.spotId ? trip.spots?.find((s) => s.id === alt.spotId) : undefined
-  const place = alt.place ?? spot?.place
+  // 有連到地點清單就用清單裡那筆（確切連結可能只補在清單上）
+  const place = spot?.place ?? alt.place
 
   const use = async () => {
     setStep('busy')

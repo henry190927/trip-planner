@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { MapPin } from 'lucide-react'
+import { MapPin, Search } from 'lucide-react'
 import type { MapProvider, Place, Traveler } from '../types'
-import { isPhone, mapAppUrl, mapLabel, mapUrl } from '../lib/maps'
+import { isExact, isPhone, mapAppUrl, mapLabel, mapUrl } from '../lib/maps'
 
 export const gradient = 'bg-[linear-gradient(135deg,var(--sky),var(--peach))]'
 
@@ -61,7 +61,11 @@ function openMapApp(e: MouseEvent<HTMLAnchorElement>, provider: MapProvider, pla
   window.location.href = app
 }
 
+/** 地圖按鈕：有確切地點連結時開那個點；沒有的話用名稱搜尋，標示也不同，免得以為一定是那間 */
 export function MapButton({ provider, place, compact }: { provider: MapProvider; place: Place; compact?: boolean }) {
+  const exact = isExact(place)
+  const Icon = exact ? MapPin : Search
+  const label = compact ? (exact ? '地圖' : '搜尋地圖') : exact ? `開 ${mapLabel[provider]}` : `${mapLabel[provider]} 搜尋`
   return (
     <a
       href={mapUrl(provider, place)}
@@ -70,8 +74,8 @@ export function MapButton({ provider, place, compact }: { provider: MapProvider;
       rel="noreferrer"
       className="inline-flex items-center gap-1 rounded-full bg-sky/35 px-3 py-1.5 text-xs font-bold text-sky-ink active:scale-95"
     >
-      <MapPin className="size-3.5" />
-      {compact ? '地圖' : `開 ${mapLabel[provider]}`}
+      <Icon className="size-3.5" />
+      {label}
     </a>
   )
 }

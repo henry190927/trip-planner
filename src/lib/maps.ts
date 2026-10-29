@@ -27,7 +27,15 @@ const appBuilders: Partial<Record<MapProvider, (q: string) => string>> = {
   kakao: (q) => `kakaomap://search?q=${encodeURIComponent(q)}`,
 }
 
+/** 有指定確切地點的連結（例如 Naver Map 的分享連結）；沒有的話按鈕只能用名稱搜尋 */
+export const isExact = (place: Place) => !!place.mapLink
+
+/** 搜尋時用的字（顯示給使用者看「會用什麼搜尋」） */
+export const searchText = queryOf
+
 export function mapAppUrl(provider: MapProvider, place: Place) {
+  // 有確切的地點連結就直接開它（不要改成搜尋，搜尋可能跳到別間分店）
+  if (isExact(place)) return undefined
   return appBuilders[provider]?.(queryOf(place))
 }
 
