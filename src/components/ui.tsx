@@ -65,13 +65,15 @@ function openMapApp(e: MouseEvent<HTMLAnchorElement>, provider: MapProvider, pla
 export function MapButton({ provider, place, compact }: { provider: MapProvider; place: Place; compact?: boolean }) {
   const exact = isExact(place)
   const Icon = exact ? MapPin : Search
-  const label = compact ? (exact ? '地圖' : '搜尋地圖') : exact ? `開 ${mapLabel[provider]}` : `${mapLabel[provider]} 搜尋`
+  // 行程卡片上的小按鈕一律寫「地圖」，只用圖示區分；地點清單才寫明是開確切地點還是搜尋
+  const label = compact ? '地圖' : exact ? `開 ${mapLabel[provider]}` : `${mapLabel[provider]} 搜尋`
   return (
     <a
       href={mapUrl(provider, place)}
       onClick={(e) => openMapApp(e, provider, place)}
       target="_blank"
       rel="noreferrer"
+      title={exact ? '打開確切的地點' : '用名稱搜尋'}
       className="inline-flex items-center gap-1 rounded-full bg-sky/35 px-3 py-1.5 text-xs font-bold text-sky-ink active:scale-95"
     >
       <Icon className="size-3.5" />
