@@ -10,7 +10,7 @@ describe('isFixed', () => {
   it('班機、演唱會預設固定；有標 fixed 的照標的', () => {
     const d = day('2026-11-07')
     expect(isFixed(at(d, '第二場・南優鉉《식목일VI – EVER GREEN》'))).toBe(true)
-    expect(isFixed(at(d, '取票・周邊排隊'))).toBe(true)
+    expect(isFixed(at(d, '取票・周邊領取'))).toBe(true)
     expect(isFixed(at(d, 'MISS 豬腳宵夜'))).toBe(false)
   })
 })
@@ -67,7 +67,7 @@ describe('shiftItems', () => {
     // 我往後 10 分：接她的路程會撞到 20:30 的散場會合（那是我們兩個的）
     expect(shiftItems(day('2026-11-07'), '14:45', 10, { who: 'me' }).errors.join()).toContain('散場會合')
     expect(shiftItems(day('2026-11-07'), '14:45', 5, { who: 'me' }).errors).toEqual([])
-    expect(shiftItems(day('2026-11-07'), '14:45', 10, { who: 'her' }).errors.join()).toContain('取票・周邊排隊')
+    expect(shiftItems(day('2026-11-07'), '14:45', 10, { who: 'her' }).errors.join()).toContain('取票・周邊領取')
   })
 
   it('往前提不能早於前面固定行程的結束；跨時區的項目不動', () => {
@@ -125,7 +125,7 @@ describe('makeRoom（insert_item）', () => {
 
   it('取票改到 17:00 之後，插入就推得動；我的自由時間跟著她出發的時間但不被她的車程拖住', () => {
     const d = day('2026-11-07')
-    at(d, '取票・周邊排隊').time = '17:00'
+    at(d, '取票・周邊領取').time = '17:00'
     const room = makeRoom(d, { time: '15:00', end: '15:30', kind: 'shopping', title: '逛 SPAO' }, ids)
     expect(room.errors).toEqual([])
     expect(Object.fromEntries(room.moved.map((m) => [m.title, `${m.from}→${m.to}`]))).toEqual({
