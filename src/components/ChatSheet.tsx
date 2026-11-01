@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, Square, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, Square, Trash2, X } from 'lucide-react'
 import type { Trip } from '../types'
 import { API_BASE } from '../lib/api'
 import { useChat, type Message, type ProposalState } from '../lib/chatStore'
@@ -111,6 +111,8 @@ function ProposalCard({ p, tripId, onApply, onDismiss }: { p: ProposalState; tri
     </div>
   )
 }
+
+const scrollToEnd = (el: HTMLElement | null, behavior: ScrollBehavior) => el?.scrollTo({ top: el.scrollHeight, behavior })
 
 function CopyButton({ text, label, className = '', iconOnly = false }: { text: () => string; label: string; className?: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -241,11 +243,14 @@ function PasscodeGate() {
 export default function ChatSheet({ trip }: { trip: Trip }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
+  // 使用者是不是停在聊天的最底部（捲動邏輯見下面）
+  const [pinned, setPinned] = useState(true)
   // 其他頁面請聊天框打開、先填好一句話
   const draft = useChat((s) => s.draft)
   const [handledDraft, setHandledDraft] = useState(draft?.n)
   if (draft && draft.n !== handledDraft && draft.tripId === trip.id) {
     setHandledDraft(draft.n)
+    setPinned(true)
     setOpen(true)
     setInput(draft.text)
   }
@@ -265,13 +270,29 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
   const [attachError, setAttachError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // 有新內容（訊息、串流文字、搜尋狀態、修改建議）時捲到最底
+  // 捲動：跟一般聊天 App 一樣
+  // - 打開時直接停在最底，不播放從頭捲下來的動畫
+  // - 使用者本來就在底部附近，新內容進來才跟著捲（逐字串流也直接跟上，不用平滑動畫）
+  // - 使用者往上滑在看舊訊息，就不拉回底部，改在下方浮出「新訊息」按鈕
   const last = messages.at(-1)
   const contentKey = `${messages.length}:${last?.text.length}:${last?.status?.length}:${last?.proposals?.length}`
+  const [seenKey, setSeenKey] = useState(contentKey)
+  const hasNew = !pinned && contentKey !== seenKey
+  const onListScroll = () => {
+    const el = listRef.current
+    if (!el) return
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    setPinned(near)
+    if (near) setSeenKey(contentKey)
+  }
+  // 打開的那一刻（畫面畫出來之前）就定位到最底
+  useLayoutEffect(() => {
+    if (open) scrollToEnd(listRef.current, 'auto')
+  }, [open])
   useEffect(() => {
-    if (!open || !contentKey) return
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-  }, [open, contentKey])
+    if (!open || !pinned || !contentKey) return
+    scrollToEnd(listRef.current, 'auto')
+  }, [open, pinned, contentKey])
 
   // 輸入框跟著內容長高：打字、快捷按鈕或其他頁面填進來的文字都一樣
   useEffect(() => {
@@ -317,6 +338,8 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     setInput('')
     setAttachments([])
     setAttachError('')
+    // 自己送出時一律回到底部，才看得到回覆
+    setPinned(true)
     void send(trip.id, t, attachments)
   }
 
@@ -325,7 +348,10 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
       <motion.button
         type="button"
         aria-label="打開旅行小幫手"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setPinned(true)
+          setOpen(true)
+        }}
         whileTap={{ scale: 0.9 }}
         className={`soft-shadow fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-[max(1rem,calc(50%-var(--frame)/2+1rem))] z-30 flex size-14 items-center justify-center rounded-full ${gradient}`}
       >
@@ -382,7 +408,8 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                 <PasscodeGate />
               ) : (
                 <>
-                  <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
+                  <div className="relative min-h-0 flex-1">
+                  <div ref={listRef} onScroll={onListScroll} className="h-full space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
                     {messages.length === 0 && (
                       <div className="flex flex-col items-center pt-4 text-center">
                         <Sprout className="w-28" />
@@ -405,6 +432,22 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                     {messages.map((m) => (
                       <Bubble key={m.id} m={m} tripId={trip.id} />
                     ))}
+                  </div>
+                  <AnimatePresence>
+                    {hasNew && (
+                      <motion.button
+                        type="button"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        onClick={() => scrollToEnd(listRef.current, 'smooth')}
+                        className="soft-shadow absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold text-sky-ink"
+                      >
+                        <ArrowDown className="size-3.5" />
+                        新訊息
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
                   </div>
 
                   {actions.length > 0 && !busy && (

@@ -205,3 +205,59 @@ test('串流沒收到結束訊號就斷了：明講連線中斷', async ({ page 
   await expect(dialog.getByText('我查到了，弘大有')).toBeVisible()
   await expect(dialog.getByText('連線中斷了，回覆可能不完整，可以再問一次。')).toBeVisible()
 })
+
+test.describe('聊天框的捲動', () => {
+  // 30 則舊對話，長到需要捲動
+  const history = Array.from({ length: 30 }, (_, i) => ({
+    id: `m${i}`,
+    role: i % 2 ? 'assistant' : 'user',
+    text: `第 ${i + 1} 則：${'這是一段比較長的對話內容，用來把聊天紀錄撐高。'.repeat(3)}`,
+  }))
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(
+      (threads) => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: { 'seoul-2026-11': threads } }, version: 1 })),
+      history,
+    )
+    await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
+  })
+
+  const position = (page: Page) =>
+    page.getByRole('dialog', { name: '旅行小幫手' }).locator('.overflow-y-auto').first().evaluate((el) => ({ top: el.scrollTop, max: el.scrollHeight - el.clientHeight }))
+
+  test('打開時直接停在最底，不會從最上面捲下來', async ({ page }) => {
+    await page.goto(`./${trip}`)
+    await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+    // 打開動畫期間每 30ms 看一次位置：從頭到尾都要在底部
+    const samples: { top: number; max: number }[] = []
+    for (let i = 0; i < 12; i++) {
+      samples.push(await position(page))
+      await page.waitForTimeout(30)
+    }
+    for (const p of samples) expect(p.max - p.top).toBeLessThan(5)
+    expect(samples[0].max).toBeGreaterThan(500)
+  })
+
+  test('往上看舊訊息時，新回覆不會把人拉回底部，改出現「新訊息」按鈕', async ({ page }) => {
+    await page.route(`${API}/api/chat`, async (r) => {
+      await new Promise((ok) => setTimeout(ok, 1500))
+      const events = [{ type: 'text', delta: '這是新的回覆' }, { type: 'done' }]
+      await r.fulfill({ contentType: 'text/event-stream', body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') })
+    })
+    await page.goto(`./${trip}`)
+    await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+    const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
+    await dialog.getByRole('textbox', { name: '訊息' }).fill('再問一個')
+    await dialog.getByRole('button', { name: '送出' }).click()
+    // 回覆還在路上時往上滑
+    const list = dialog.locator('.overflow-y-auto').first()
+    await list.evaluate((el) => el.scrollTo({ top: 0 }))
+    await expect(dialog.getByText('這是新的回覆')).toBeAttached()
+    expect((await position(page)).top).toBeLessThan(50)
+    const jump = dialog.getByRole('button', { name: '新訊息' })
+    await expect(jump).toBeVisible()
+    await jump.click()
+    await expect.poll(async () => { const p = await position(page); return p.max - p.top }).toBeLessThan(5)
+    await expect(jump).toBeHidden()
+  })
+})
