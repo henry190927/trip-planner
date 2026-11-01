@@ -38,6 +38,8 @@ export interface ChatMessage {
 }
 
 const MAX_STEPS = 6
+/** 一輪對話最多搜尋幾次 */
+const MAX_SEARCHES = 2
 
 // ---- 給模型的工具定義（Gemini 的 OpenAPI 子集格式）----
 const str = (description?: string) => ({ type: 'string', ...(description && { description }) })
@@ -115,7 +117,8 @@ const tools = [
     functionDeclarations: [
       {
         name: 'web_search',
-        description: '上網搜尋最新資訊：營業時間、地址、交通、票價、店家推薦等。回答事實性問題前先查。韓國店家用韓文店名查通常比較準；結果是網頁摘要，要自己判斷可信度與日期。',
+        description:
+          '上網搜尋行程資料裡沒有、而且會變動的外部資訊（營業時間、價格、新店家推薦、班次、天氣）。問行程本身或調整行程時不需要用。韓國店家用韓文店名查通常比較準；結果是網頁摘要，要自己判斷可信度與日期。',
         parameters: {
           type: 'object',
           properties: {
@@ -226,13 +229,19 @@ function systemPrompt(trip: Trip, viewer?: string) {
   const me = viewer ? trip.travelers.find((t) => t.id === viewer) : undefined
   return `你是「旅行手帖」的旅行小幫手「小樹」，幫一對旅伴規劃與調整這趟旅程。
 
+# 什麼時候上網搜尋
+- 先看下面的行程資料與地點清單，能直接回答就直接回答，不要搜尋。
+- 要搜尋：行程和地點清單裡沒有、而且會變動的外部資訊，例如營業時間或公休、價格、推薦新的店家或景點、交通班次、天氣、活動公告。這類資訊不要憑記憶，查不到就直說。
+- 不用搜尋：問行程本身（幾點、去哪、誰去）、調整時間或順序（延後、提早、插入、挪動）、加小任務或備案、標成完成、整理或比較已經有的安排、閒聊；使用者已經給了資訊（貼的文字、截圖、連結）；地點清單裡已經有確認過的資料（有確認日期）。
+- 真的要搜時，一次呼叫把所有要查的事放進 queries，不要一件一件查。
+
 # 規則
 - 一律用繁體中文（台灣用語）回答，口氣親切、簡潔，手機上好讀；不要用表格，也不要用 emoji。
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
 - 現在用這支手機的是：${me ? `「${me.name}」（id: ${me.id}）` : '還沒選（兩個人都可能）'}。
-- 事實性資訊（營業時間、地址、交通、價格、推薦店家）先用 web_search 查，不要憑記憶；查不到就直說。要查好幾件事（例如三間店的營業時間）時，一次呼叫放多個 queries，不要一件一件查。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。呼叫 propose_changes 之前不要提到「套用」按鈕；等工具回傳 ok: true 之後，才請使用者按「套用」。
 - 地圖連結（mapLink）只能用搜尋結果裡真的出現過、或使用者貼的網址，不要自己組 Naver 連結；沒有就只填 local 與 mapQuery（用當地語言的完整店名，分店名也寫上，地圖 App 才搜得到正確的那間）。回答的文字裡也不要附自己組的地圖網址；要給地圖，就請使用者在地點清單或行程卡片按「地圖」（會用店名直接在地圖 App 裡搜尋）。
+- 修改被系統退回時，照錯誤訊息直接修正再送，回答裡不要提到退回、重試或道歉，只講最後的結果。
 - 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
 - 使用者附的圖片多半是地圖 App 的截圖（營業時間、地址、公休）、菜單或票券。從截圖讀到的營業時間可以填進地點的 hours 與 open，checkedAt 填今天，note 註明「依使用者提供的截圖」，並拿掉對應的 verify；看不清楚或被切掉的部分不要猜，照實說。
@@ -242,7 +251,8 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 只屬於某位旅伴的項目才填 who；routeId 只能用既有的路線 id。
 - 排行程時考慮移動時間與兩人分頭行動的時段，不要排到時間衝突：同一個人同一時間只能有一件事（系統會擋下重疊的修改）。兩個人分頭行動的時段，新加的項目要用 who 指定給有空的那個人。
 - 把新項目加進已經有安排的時段時，用 insert_item（要有 time 與 end）：系統會自動把後面被蓋到的彈性項目往後推，中間有空檔就吸收，推到會撞固定行程時會回報。不要用 add_item 直接塞進去。推不動時，跟使用者商量要縮短、拿掉哪一項，或調整固定行程（例如取票時間還有餘裕）。
-- 插入或挪動之後，回答時用一兩句話說明這一天的順序怎麼變了，讓使用者套用前就知道。
+- 要延後或提早某件事，是「挪動」它：改 time，結束時間會自動跟著移；不要只改 end（那是拉長）。交通的長度不要改，除非使用者說路上會比較久。要拉長某件事（例如逛街多逛一點），才改 end，並把後面受影響的項目一起挪。
+- 插入或挪動之後，回答時用一兩句話說明這一天的順序怎麼變了，讓使用者套用前就知道；說明要跟實際送出的修改一致，沒有改到的項目不要說有改。
 - 「地點清單」（spots）收已排進行程的地點與還沒排的口袋名單。使用者丟店家連結、或說「想去但還沒決定」時，用 add_spot 加進清單，不要直接排進行程。
 - 加地點時一定要填 area（所在地區），而且沿用清單裡已經有的地區叫法（例如「弘大」），不要另外取新名字；真的在別區才用新的地區名。
 - 把清單裡的地點排進行程時，行程項目的 spotId 填那個地點的 id；同一個地點的營業時間、交通等資訊寫在地點上，不要重複寫在行程項目裡。
@@ -333,7 +343,26 @@ export function newOverlaps(before: Trip, after: Trip) {
     const old = new Set(overlaps(before.days.find((d) => d.date === day.date) ?? { ...day, items: [] }))
     return overlaps(day)
       .filter((o) => !old.has(o))
-      .map((o) => `${day.date.slice(5).replace('-', '/')} ${o}`)
+      .map((o) => `時間重疊（同一個人同時有兩件事）：${day.date.slice(5).replace('-', '/')} ${o}`)
+  })
+}
+
+const lengthOf = (i: { time?: string; end?: string }) =>
+  i.time && i.end ? Number(i.end.slice(0, 2)) * 60 + Number(i.end.slice(3)) - (Number(i.time.slice(0, 2)) * 60 + Number(i.time.slice(3))) : undefined
+
+/** 交通的長度被改了 15 分鐘以上（多半是想延後出發卻只改了結束時間） */
+export function transitLengthChanges(before: Trip, after: Trip) {
+  return after.days.flatMap((day) => {
+    const old = before.days.find((d) => d.date === day.date)
+    return day.items.flatMap((i) => {
+      if (i.kind !== 'transit') return []
+      const was = old?.items.find((o) => o.kind === 'transit' && o.title === i.title)
+      const a = was && lengthOf(was)
+      const b = lengthOf(i)
+      return a !== undefined && b !== undefined && Math.abs(a - b) >= 15
+        ? [`交通「${i.title}」的長度從 ${a} 分變成 ${b} 分；移動時間通常不會變，要延後出發請改出發時間（time），結束時間會自動跟著移`]
+        : []
+    })
   })
 }
 
@@ -357,6 +386,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
   // 說了「套用」卻沒有產生修改時要補一句，免得使用者找不到按鈕
   let proposals = 0
   let saidApply = false
+  let searches = 0
   const finish = () => {
     if (saidApply && proposals === 0) emit({ type: 'text', delta: '\n\n（剛剛沒有成功產生修改，所以沒有「套用」按鈕；可以再說一次要怎麼改。）' })
   }
@@ -398,7 +428,11 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
     for (const call of calls) {
       const args = call.args ?? {}
       let response: Record<string, unknown>
-      if (call.name === 'web_search') {
+      if (call.name === 'web_search' && searches >= MAX_SEARCHES) {
+        // 一輪對話搜太多次又慢又耗額度：用手上的資料回答
+        response = { error: `這一輪已經搜尋 ${MAX_SEARCHES} 次了，請用目前的資料回答，不夠的部分照實說還沒查到` }
+      } else if (call.name === 'web_search') {
+        searches += 1
         const raw = Array.isArray(args.queries) ? args.queries : [args.query]
         const queries = raw.filter((q): q is string => typeof q === 'string')
         emit({ type: 'status', text: `搜尋：${queries.slice(0, MAX_QUERIES).join('、')}` })
@@ -438,14 +472,14 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           }
         } else {
           const applied = applyOps(stored.trip, parsed.data)
-          const clashes = applied.errors.length ? [] : newOverlaps(stored.trip, applied.trip)
+          const clashes = applied.errors.length ? [] : [...newOverlaps(stored.trip, applied.trip), ...transitLengthChanges(stored.trip, applied.trip)]
           if (applied.errors.length) {
             response = { ok: false, errors: applied.errors }
           } else if (clashes.length) {
             response = {
               ok: false,
-              errors: clashes.map((c) => `時間重疊（同一個人同時有兩件事）：${c}`),
-              hint: '請改用 insert_item 自動把後面的行程往後推，或改時間、用 who 只排給有空的人；固定行程不能動',
+              errors: clashes,
+              hint: '請改用 insert_item 自動把後面的行程往後推，或改時間、用 who 只排給有空的人；要延後出發是改 time（結束時間會自動跟著移），不是拉長交通時間；固定行程不能動',
             }
           } else {
             emit({

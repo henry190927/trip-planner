@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { seoul2026 } from '../src/trips/seoul-2026-11'
 
 const trip = '#/trip/seoul-2026-11'
+
+// 不連線上的後端：測試結果不能跟著線上資料變，一律回傳網站內建的行程
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/trips', (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
+})
 
 test('首頁顯示旅程卡', async ({ page }) => {
   await page.goto('./')
@@ -13,7 +19,7 @@ test('只看「她」的行程時，不會出現「我」的項目', async ({ pa
   await expect(page.getByText('帶兩人的行李搭計程車')).toBeVisible()
   await page.getByRole('radio', { name: '她' }).click()
   await expect(page.getByText('帶兩人的行李搭計程車')).toHaveCount(0)
-  await expect(page.getByText('取票・簡單吃晚餐')).toBeVisible()
+  await expect(page.getByText(/取票・吃晚餐/)).toBeVisible()
   await page.getByRole('radio', { name: '全部' }).click()
   await page.screenshot({ path: 'e2e/screenshots/plan.png', fullPage: true })
 })

@@ -238,3 +238,21 @@ describe('insert_item', () => {
     expect(r.errors[0]).toMatch(/^插入「逛 SPAO」要把後面的行程往後推，但.*取票.*請縮短或拿掉某個彈性項目，或改時間$/)
   })
 })
+
+describe('update_item 只改開始時間', () => {
+  it('結束時間跟著移、長度不變；有指定結束時間就照指定的', () => {
+    const r = applyOps(seoul2026, [{ op: 'update_item', date: day2, title: '弘大 → KBS Arena', changes: { time: '16:15' } }])
+    expect(r.errors).toEqual([])
+    expect(r.trip.days[1].items.find((i) => i.title === '弘大 → KBS Arena')).toMatchObject({ time: '16:15', end: '17:00' })
+    expect(r.changes[0].text).toContain('結束時間')
+    const both = applyOps(seoul2026, [{ op: 'update_item', date: day2, title: '弘大 → KBS Arena', changes: { time: '16:15', end: '16:50' } }])
+    expect(both.trip.days[1].items.find((i) => i.title === '弘大 → KBS Arena')).toMatchObject({ time: '16:15', end: '16:50' })
+  })
+})
+
+describe('修改紀錄寫出誰改成誰', () => {
+  it('全員 → 她', () => {
+    const r = applyOps(seoul2026, [{ op: 'update_item', date: day2, title: '逛 STAND OIL 弘大旗艦店', changes: { who: ['her'] } }])
+    expect(r.changes[0].text).toBe('11/7 15:00「逛 STAND OIL 弘大旗艦店」：誰 全員 → 她')
+  })
+})

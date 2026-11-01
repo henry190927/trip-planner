@@ -38,6 +38,12 @@ function sortItems(items: Item[]) {
 }
 
 // 私人小任務在修改紀錄裡不寫標題（兩個人都看得到紀錄）
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))
+const addMinutes = (hhmm: string, delta: number) => {
+  const m = Math.min(Math.max(minutesOf(hhmm) + delta, 0), 24 * 60)
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
+
 const label = (date: string, item: Pick<Item, 'time' | 'title' | 'private'>) =>
   `${formatDate(date, false)}${item.time ? ` ${item.time}` : ''}${item.private ? '的私人小任務' : `「${item.title}」`}`
 
@@ -219,10 +225,17 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           if (value === null) delete item[key]
           else item[key] = value
         }
-        const fields = Object.keys(op.changes).map((k) => {
+        // 只改開始時間：視為整件事挪過去，結束時間跟著移、長度不變
+        const keepLength = typeof op.changes.time === 'string' && op.changes.end === undefined && typeof before.end === 'string' && typeof before.time === 'string'
+        if (keepLength) item.end = addMinutes(before.end as string, minutesOf(op.changes.time as string) - minutesOf(before.time as string))
+        const fields = [...Object.keys(op.changes), ...(keepLength ? ['end'] : [])].map((k) => {
           const from = before[k]
           const to = item[k]
           const show = (v: unknown) => (typeof v === 'string' ? v : v === undefined ? '（無）' : '已修改')
+          // 誰：寫出名字，看得出從誰改成誰（沒填 = 全員）
+          const people = (v: unknown) =>
+            Array.isArray(v) ? v.map((id) => trip.travelers.find((t) => t.id === id)?.name ?? id).join('、') : '全員'
+          if (k === 'who') return `${fieldNames.who} ${people(from)} → ${people(to)}`
           return k === 'time' || k === 'end' || k === 'title' ? `${fieldNames[k] ?? k} ${show(from)} → ${show(to)}` : (fieldNames[k] ?? k)
         })
         changes.push({ kind: 'update', text: `${label(op.date, before as Item)}：${fields.join('、')}`, date: op.date })

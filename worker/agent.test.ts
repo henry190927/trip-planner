@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trips } from '../src/trips'
-import { checkAgentOps, newOverlaps, normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
+import { checkAgentOps, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -218,5 +218,32 @@ describe('newOverlaps', () => {
     expect(newOverlaps(before, add(['me'])).join()).toContain('自由時間')
     // 原本就沒有重疊的行程不會被誤報
     expect(newOverlaps(before, before)).toEqual([])
+  })
+})
+
+describe('搜尋次數上限', () => {
+  it('一輪最多搜尋兩次，第三次直接請模型用手上的資料回答', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const search = () => sse([{ functionCall: { name: 'web_search', args: { queries: ['미쓰족발'] } } }])
+    const replies: string[] = []
+    const { env, gemini } = fakeEnv([search, search, search, () => sse([{ text: '好' }])])
+    gemini.mockImplementation(async (req: Request) => {
+      replies.push(await req.text())
+      return [search, search, search, () => sse([{ text: '好' }])][Math.min(replies.length - 1, 3)]()
+    })
+    const { events } = await run(env)
+    expect(events.filter((e) => e.type === 'status' && e.text.startsWith('搜尋：'))).toHaveLength(2)
+    expect(replies.at(-1)).toContain('已經搜尋 2 次了')
+  })
+})
+
+describe('transitLengthChanges', () => {
+  it('只改交通的結束時間（變成搭 90 分鐘）會被抓到；整段挪動不會', async () => {
+    const { applyOps } = await import('../src/lib/ops')
+    const before = trips[0]
+    const stretched = applyOps(before, [{ op: 'update_item', date: '2026-11-07', title: '弘大 → KBS Arena', changes: { end: '17:00' } }]).trip
+    expect(transitLengthChanges(before, stretched).join()).toContain('長度從 45 分變成 90 分')
+    const moved = applyOps(before, [{ op: 'update_item', date: '2026-11-07', title: '弘大 → KBS Arena', changes: { time: '16:15' } }]).trip
+    expect(transitLengthChanges(before, moved)).toEqual([])
   })
 })
