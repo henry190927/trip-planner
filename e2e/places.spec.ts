@@ -10,10 +10,10 @@ test.beforeEach(async ({ page }) => {
 test('列出已排進行程與口袋名單，可以依分類篩選，點「已排入」跳到那一天', async ({ page }) => {
   await page.goto(`./${trip}/places`)
   await expect(page.getByRole('heading', { name: '地點清單' })).toBeVisible()
-  await expect(page.getByText('已排進行程 6・口袋名單 7')).toBeVisible()
+  await expect(page.getByText('已排進行程 7・口袋名單 7')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'MEGA COFFEE 弘大入口站店' })).toBeVisible()
   // 只有換匯機台有營業時段（24 小時）：有「現在營業中」篩選，只有它標營業中，其他沒資料的不亂標
-  await expect(page.getByText(/^(營業中|休息中)$/)).toHaveCount(2)
+  await expect(page.getByText(/^(營業中|休息中)$/)).toHaveCount(3)
   await expect(page.locator('#spot-money-planet').getByText('營業中', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /現在營業中/ }).click()
   // 24 小時的換匯機台一定在；牛仔褲店看當下時間
@@ -24,7 +24,7 @@ test('列出已排進行程與口袋名單，可以依分類篩選，點「已�
   await page.getByRole('button', { name: /吃 5/ }).click()
   await expect(page.locator('section[id^="spot-"]')).toHaveCount(5)
   await page.getByRole('button', { name: /全部/ }).click()
-  await expect(page.locator('section[id^="spot-"]')).toHaveCount(13)
+  await expect(page.locator('section[id^="spot-"]')).toHaveCount(14)
 
   // 地區按鈕跟著分類走：咖啡裡只有弘大、KBS 周邊各一間，不會出現空的「望遠」
   await page.getByRole('button', { name: /咖啡・飲料 2/ }).click()
@@ -128,7 +128,7 @@ test.describe('編輯、刪除、新增地點', () => {
     await dialog.getByRole('button', { name: '儲存' }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('heading', { name: '測試咖啡' })).toBeVisible()
-    await expect(page.getByText('已排進行程 6・口袋名單 8')).toBeVisible()
+    await expect(page.getByText('已排進行程 7・口袋名單 8')).toBeVisible()
   })
 })
 

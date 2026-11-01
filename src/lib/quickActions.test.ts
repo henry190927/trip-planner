@@ -11,8 +11,8 @@ describe('quickActions', () => {
     const her = quickActions(seoul2026, { date: '2026-11-07', time: '13:10' }, 'her')
     const early = her.find((a) => a.label === '早到了')!.text
     expect(early).toContain('現在是 11/7 13:10（我是「她」）')
-    expect(early).toContain('15:30「取票・周邊排隊」')
-    expect(her.find((a) => a.label === '附近吃的')!.text).toContain('「EPT 弘大店」附近')
+    expect(early).toContain('16:15「取票・周邊排隊」')
+    expect(her.find((a) => a.label === '附近吃的')!.text).toContain('「MUSINSA KICKS 弘大（鞋子）」附近')
     // 我沒有取票，下一個固定行程是兩個人的散場會合
     const me = quickActions(seoul2026, { date: '2026-11-07', time: '15:00' }, 'me')
     expect(me.find((a) => a.label === '早到了')!.text).toContain('20:30「散場會合」')

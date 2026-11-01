@@ -103,3 +103,22 @@ export function shiftItems(
   }
   return { moved: plans.length, until: stop, errors }
 }
+
+/**
+ * 同一個人同時有兩件事：有共同旅伴、而且時間重疊（沒有結束時間的當成一個時間點，開始時間相同也算）。
+ * 回傳像「14:45「A」和 14:45「B」」的說明，用來擋下排出衝突的修改。
+ */
+export function overlaps(day: Day): string[] {
+  const timed = day.items.filter(local) as (Item & { time: string })[]
+  const span = (i: Item & { time: string }) => [toMin(i.time), i.end ? toMin(i.end) : toMin(i.time)] as const
+  const found: string[] = []
+  timed.forEach((a, i) =>
+    timed.slice(i + 1).forEach((b) => {
+      if (!shareSomeone(a, b)) return
+      const [as, ae] = span(a)
+      const [bs, be] = span(b)
+      if (as === bs || (as < be && bs < ae)) found.push(`${a.time}「${a.title}」和 ${b.time}「${b.title}」`)
+    }),
+  )
+  return found
+}

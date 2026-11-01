@@ -55,6 +55,12 @@ const ept: Place = {
   addressLocal: ['서울특별시 마포구 독막로7길 62'],
   mapQuery: '이피티 홍대점',
 }
+const standOil: Place = {
+  name: 'STAND OIL 弘大旗艦店',
+  local: '스탠드오일 플래그십스토어 홍대',
+  addressLocal: ['서울특별시 마포구 양화로 151 1층'],
+  mapQuery: '스탠드오일 플래그십스토어 홍대',
+}
 const mangwon: Place = { name: '望遠市場', local: '망원시장', mapQuery: '망원시장' }
 
 const hoursUnknown = '營業時間待確認（出發前看 Naver Map）'
@@ -184,6 +190,19 @@ const spots: Spot[] = [
     tags: ['服飾', '牛仔褲', '弘大逛街'],
     note: '弘大熱門牛仔褲/服飾專賣店，提供剪裁調腰圍服務。地點在 Nike 旁邊小巷進去。',
     checkedAt: '2026-10-29',
+  },
+  // 10/31 用小樹加的
+  {
+    id: 'stand-oil',
+    place: standOil,
+    category: 'shopping',
+    area: '弘大',
+    hours: '11:00–21:00',
+    open: [{ days: [0, 1, 2, 3, 4, 5, 6], from: '11:00', to: '21:00' }],
+    access: '弘大入口站 1 號出口附近',
+    tags: ['包包', '逛街', '弘大'],
+    note: '韓國熱門小包品牌，門市販售包包與鞋子等系列。',
+    checkedAt: '2026-11-01',
   },
   {
     id: 'mangwon-market',
@@ -381,6 +400,7 @@ export const seoul2026: Trip = {
       items: [
         {
           time: '12:00',
+          end: '13:00',
           kind: 'food',
           title: '午餐・韓牛燒肉「朝鮮火爐烤肉」',
           place: joseonHwaro,
@@ -388,16 +408,7 @@ export const seoul2026: Trip = {
         },
         {
           time: '13:00',
-          end: '13:30',
-          kind: 'shopping',
-          title: '逛鞋店 EPT 弘大店',
-          place: ept,
-          spotId: 'ept-hongdae',
-          note: '弘大熱門鞋店，適合逛完 MUSINSA 後順路去。營業時間：12:00–22:00。',
-        },
-        {
-          time: '13:30',
-          end: '14:15',
+          end: '13:45',
           kind: 'shopping',
           title: 'MUSINSA KICKS 弘大：逛鞋子',
           place: musinsaKicks,
@@ -405,16 +416,35 @@ export const seoul2026: Trip = {
           note: '2026 年 1 月開的鞋子專門店，地上 1–3 樓。吃飽後散步去逛街。',
         },
         {
-          time: '14:15',
+          time: '13:45',
+          end: '14:30',
           kind: 'shopping',
           title: 'MUSINSA STANDARD 弘大：逛衣服',
           place: musinsaStandard,
           spotId: 'musinsa-standard',
-          note: 'MUSINSA 自有品牌的旗艦店，外國旅客滿額退稅，記得帶護照。逛完直接送她去搭車。',
+          note: 'MUSINSA 自有品牌的旗艦店，外國旅客滿額退稅，記得帶護照。',
         },
         {
-          time: '14:45',
+          time: '14:30',
+          end: '15:00',
+          kind: 'shopping',
+          title: '逛鞋店 EPT 弘大店',
+          place: ept,
+          spotId: 'ept-hongdae',
+          note: '弘大熱門鞋店，適合逛完 MUSINSA 後順路去。營業時間：12:00–22:00。',
+        },
+        {
+          time: '15:00',
           end: '15:30',
+          kind: 'shopping',
+          title: '逛 STAND OIL 弘大旗艦店',
+          place: standOil,
+          spotId: 'stand-oil',
+          note: '韓國熱門小包品牌旗艦店，位於 1 樓，可以順路挑選包包。營業時間：11:00–21:00。逛完送她去搭車。',
+        },
+        {
+          time: '15:30',
+          end: '16:15',
           who: [HER],
           kind: 'transit',
           title: '弘大 → KBS Arena',
@@ -422,7 +452,7 @@ export const seoul2026: Trip = {
           routeId: 'stay-to-arena',
         },
         {
-          time: '14:45',
+          time: '15:30',
           who: [ME],
           kind: 'sight',
           title: '自由時間：京義線林蔭道・望遠市場',
@@ -448,13 +478,13 @@ export const seoul2026: Trip = {
           tentative: true,
         },
         {
-          time: '15:30',
+          time: '16:15',
           who: [HER],
           kind: 'shopping',
           title: '取票・周邊排隊',
           fixed: true,
           place: arena,
-          note: '今天的取票時間是 15:00–17:30（開演前 3 小時到前 30 分鐘）。',
+          note: '今天的取票時間是 15:00–17:30（開演前 3 小時到前 30 分鐘），16:15 到還有一個多小時，不用太早出發。',
           verify: '周邊販售時間與地點等主辦公告',
         },
         {
@@ -658,7 +688,7 @@ export const seoul2026: Trip = {
     {
       id: 'stay-to-arena',
       title: '弘大 → KBS Arena',
-      when: '她：11/7 14:45 出發｜我：去接她時（11/6 21:15、11/7 19:45）',
+      when: '她：11/7 15:30 出發｜我：去接她時（11/6 21:15、11/7 19:45）',
       summary: '地鐵約 40–45 分鐘。兩條路線差不多，看哪個月台比較近。',
       options: [
         {
