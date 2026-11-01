@@ -28,7 +28,7 @@ export function integrityErrors(trip: Trip): string[] {
         if (alt.spotId && !spotIds.has(alt.spotId)) errors.push(`「${item.title}」的備案「${alt.title}」的地點「${alt.spotId}」不在地點清單裡`)
         if (alt.routeId && !routeIds.has(alt.routeId)) errors.push(`「${item.title}」的備案「${alt.title}」的 routeId「${alt.routeId}」不存在`)
       }
-      if ((item.alternatives ?? []).filter((a) => a.original).length > 1) errors.push(`「${item.title}」有不只一個「原本的安排」`)
+      if ((item.alternatives ?? []).filter((a) => a.original).length > 1) errors.push(`「${item.title}」有不只一個「原本排的」`)
       if (item.private && !item.who?.length) errors.push(`「${item.title}」是私人的，要填負責人（who）`)
     }
   for (const r of trip.routes) {

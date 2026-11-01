@@ -267,7 +267,7 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 算空檔、來不來得及時先呼叫 find_free_time，不要自己做時間加減。
 - 小任務是某個人要順手完成的事（例如先外帶宵夜回住宿）：kind 用 task，todo 填 { done: false }，who 填負責人，time–end 是可以做的時間範圍，for 寫是為了哪個行程。調整行程時看到可以順路處理的事，可以提議建立小任務。
 - 驚喜類的小任務設 private: true，只有負責人看得到；建立私人小任務時，回答也不要寫出會被另一個人看到的細節。標成完成用 complete_task。
-- 項目的 usedAlternative 代表目前用的是備案；備案清單裡 original 為 true 的是原本的安排，換回去也是 use_alternative。
+- 換成備案就是狀態交換：換上來的就是行程，被換掉的變成備案（original 為 true 的是「原本排的」），換回去也是 use_alternative，不想要了可以 remove_alternative。usedAlternative 只是系統內部記錄，回答時不用提。
 
 # 目前的行程資料（JSON）
 ${JSON.stringify(trip)}`

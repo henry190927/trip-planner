@@ -57,9 +57,11 @@ test('遇到狀況：點「下雨」只展開對應的備案，改用之後可�
   expect(sent[0]).toMatchObject({ source: 'manual', ops: [{ op: 'use_alternative', index: 0 }] })
 
   const now = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '自由時間：逛 AK& 弘大' }) })
-  await expect(now.getByText('已改用備案')).toBeVisible()
-  await now.getByRole('button', { name: /其他安排/ }).click()
-  await now.getByRole('button', { name: '換回原本的' }).click()
+  // 換上來的就是正式行程，不另外標「改用備案」；被換掉的變成「原本排的」備案
+  await expect(now.getByText('已改用備案')).toHaveCount(0)
+  await now.getByRole('button', { name: /備案 2/ }).click()
+  await expect(now.getByText('原本排的', { exact: true })).toBeVisible()
+  await now.getByRole('button', { name: '換回原本排的' }).click()
   await now.getByRole('button', { name: /確定換成/ }).click()
   await expect(page.getByRole('heading', { name: '自由時間：京義線林蔭道・望遠市場' })).toBeVisible()
 })
@@ -75,7 +77,7 @@ test('還沒輸入通關密語時，改用備案會提示先輸入', async ({ pa
   await expect(card.getByText('要先在小樹那邊輸入通關密語')).toBeVisible()
 })
 
-test('備案可以刪除（要再確認）；「原本的安排」不能刪', async ({ page }) => {
+test('備案可以刪除（要再確認）；「原本排的」也能刪，換上來的就成為正式行程', async ({ page }) => {
   const sent = await mockApi(page)
   await page.goto(`./${trip}`)
   await page.getByRole('button', { name: /DAY 2/ }).click()
@@ -90,11 +92,14 @@ test('備案可以刪除（要再確認）；「原本的安排」不能刪', as
   expect(sent[0]).toMatchObject({ source: 'manual', ops: [{ op: 'remove_alternative', index: 1 }] })
   await expect(card.getByRole('button', { name: /備案 1/ })).toBeVisible()
 
-  // 換成剩下的備案後，「其他安排」裡的原本的安排沒有刪除按鈕
+  // 換成剩下的備案後，被換掉的變成「原本排的」，一樣可以刪
   await card.getByRole('button', { name: '改用這個' }).click()
   await card.getByRole('button', { name: /確定換成/ }).click()
   const now = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '外帶 MISS 豬腳回住宿吃' }) })
-  await now.getByRole('button', { name: /其他安排/ }).click()
-  await expect(now.getByRole('button', { name: '換回原本的' })).toBeVisible()
-  await expect(now.getByRole('button', { name: /^刪除備案/ })).toHaveCount(0)
+  await now.getByRole('button', { name: /備案 1/ }).click()
+  await expect(now.getByRole('button', { name: '換回原本排的' })).toBeVisible()
+  await now.getByRole('button', { name: '刪除備案「MISS 豬腳宵夜」' }).click()
+  await now.getByRole('button', { name: '刪除', exact: true }).click()
+  await expect(now.getByRole('button', { name: /備案/ })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '外帶 MISS 豬腳回住宿吃' })).toBeVisible()
 })
