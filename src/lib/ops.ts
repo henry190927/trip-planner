@@ -266,6 +266,23 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         changes.push({ kind: 'add', text: `清單「${op.group}」：${op.label}` })
         break
       }
+      case 'remove_checklist_item': {
+        const matches = trip.checklist.flatMap((g) =>
+          (op.group && g.title !== op.group ? [] : g.items).filter((i) => i.id === op.ref || i.label === op.ref).map((i) => ({ g, i })),
+        )
+        if (matches.length === 0) {
+          errors.push(`清單裡找不到「${op.ref}」${op.group ? `（在「${op.group}」）` : ''}`)
+          break
+        }
+        if (matches.length > 1) {
+          errors.push(`清單裡有 ${matches.length} 個「${op.ref}」，請加上 group（${matches.map((m) => m.g.title).join('、')}）`)
+          break
+        }
+        const [{ g, i }] = matches
+        g.items = g.items.filter((x) => x !== i)
+        changes.push({ kind: 'remove', text: `清單「${g.title}」：${i.label}` })
+        break
+      }
       case 'add_pending': {
         trip.pending = [...(trip.pending ?? []), op.text]
         changes.push({ kind: 'add', text: `還缺的資料：${op.text}` })

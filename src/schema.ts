@@ -284,6 +284,8 @@ export const opSchema = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('remove_item'), date: isoDate, title: z.string(), time: hhmm.optional() }),
   z.object({ op: z.literal('add_checklist_item'), group: z.string(), label: z.string() }),
+  /** ref：清單項目的 id 或文字；不同分組有同樣文字時再加 group 區分 */
+  z.object({ op: z.literal('remove_checklist_item'), ref: z.string(), group: z.string().optional() }),
   z.object({ op: z.literal('add_pending'), text: z.string() }),
   z.object({ op: z.literal('remove_pending'), text: z.string() }),
   /** 加進地點清單；id 省略時自動產生 */

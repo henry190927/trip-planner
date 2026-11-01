@@ -256,3 +256,29 @@ describe('修改紀錄寫出誰改成誰', () => {
     expect(r.changes[0].text).toBe('11/7 15:00「逛 STAND OIL 弘大旗艦店」：誰 全員 → 她')
   })
 })
+
+describe('remove_checklist_item', () => {
+  it('用文字或 id 刪掉清單項目', () => {
+    const r = applyOps(seoul2026, [{ op: 'remove_checklist_item', ref: 'Kakao T 註冊、綁卡' }])
+    expect(r.errors).toEqual([])
+    expect(r.trip.checklist.flatMap((g) => g.items.map((i) => i.id))).not.toContain('kakaot')
+    expect(r.changes[0]).toEqual({ kind: 'remove', text: '清單「App 與網路」：Kakao T 註冊、綁卡' })
+    expect(applyOps(seoul2026, [{ op: 'remove_checklist_item', ref: 'kakaot' }]).errors).toEqual([])
+  })
+
+  it('找不到、或不同分組有同樣文字時回報', () => {
+    expect(applyOps(seoul2026, [{ op: 'remove_checklist_item', ref: '不存在' }]).errors[0]).toContain('找不到')
+    const dup = applyOps(seoul2026, [
+      { op: 'add_checklist_item', group: '隨身物品', label: '充電線' },
+      { op: 'add_checklist_item', group: 'App 與網路', label: '充電線' },
+      { op: 'remove_checklist_item', ref: '充電線' },
+    ])
+    expect(dup.errors[0]).toContain('請加上 group')
+    const ok = applyOps(seoul2026, [
+      { op: 'add_checklist_item', group: '隨身物品', label: '充電線' },
+      { op: 'add_checklist_item', group: 'App 與網路', label: '充電線' },
+      { op: 'remove_checklist_item', ref: '充電線', group: '隨身物品' },
+    ])
+    expect(ok.errors).toEqual([])
+  })
+})
