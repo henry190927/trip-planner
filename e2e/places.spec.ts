@@ -139,3 +139,20 @@ test('手機上點地圖先試著開 App，沒裝 App 就改開網頁版', async
   // 沒有 App：等一下之後改開網頁版的搜尋
   await expect(page).toHaveURL(/map\.naver\.com\/p\/search\//, { timeout: 5000 })
 })
+
+test('已排進行程、口袋名單可以各自收合，重新整理後維持', async ({ page }) => {
+  await page.goto(`./${trip}/places`)
+  const pocketToggle = page.getByRole('button', { name: /^口袋名單 \d+$/ })
+  await expect(pocketToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('#spot-mega-coffee')).toBeVisible()
+  await pocketToggle.click()
+  await expect(pocketToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('#spot-mega-coffee')).toHaveCount(0)
+  // 另一區不受影響
+  await expect(page.locator('#spot-miss-jokbal')).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: /^口袋名單 \d+$/ })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('#spot-mega-coffee')).toHaveCount(0)
+  await page.getByRole('button', { name: /^口袋名單 \d+$/ }).click()
+  await expect(page.locator('#spot-mega-coffee')).toBeVisible()
+})

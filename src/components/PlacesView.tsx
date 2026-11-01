@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Clock, Coffee, Landmark, LoaderCircle, MessageCircle, Pencil, Plus, ShoppingBag, Sparkles, Trash2, TrainFront, UtensilsCrossed, type LucideIcon } from 'lucide-react'
+import { ChevronDown, Clock, Coffee, Landmark, LoaderCircle, MessageCircle, Pencil, Plus, ShoppingBag, Sparkles, Trash2, TrainFront, UtensilsCrossed, type LucideIcon } from 'lucide-react'
 import type { Spot, SpotCategory, Trip } from '../types'
 import { useChat } from '../lib/chatStore'
+import { usePrefs } from '../lib/store'
 import { formatDate } from '../lib/dates'
 import { openStatus, type OpenStatus } from '../lib/hours'
 import { href } from '../lib/router'
@@ -38,6 +39,26 @@ function CategoryLabel({ category, count }: { category: SpotCategory; count: num
       <Icon className="size-3.5" />
       {label} {count}
     </span>
+  )
+}
+
+/** 可以收起來的區塊；收合狀態記在這支手機上 */
+function SpotSection({ id, title, count, children }: { id: string; title: string; count: number; children: ReactNode }) {
+  const collapsed = usePrefs((s) => s.collapsed.includes(id))
+  const toggle = usePrefs((s) => s.toggleCollapsed)
+  return (
+    <section className="space-y-3">
+      <button
+        type="button"
+        onClick={() => toggle(id)}
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-1 px-1 text-sm font-extrabold text-mute"
+      >
+        {title} {count}
+        <ChevronDown className={`size-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+      </button>
+      {!collapsed && children}
+    </section>
   )
 }
 
@@ -293,16 +314,14 @@ export default function PlacesView({ trip, now, focus }: { trip: Trip; now: Zone
       )}
 
       {planned.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="px-1 text-sm font-extrabold text-mute">已排進行程</h3>
+        <SpotSection id={`${trip.id}:planned`} title="已排進行程" count={planned.length}>
           {planned.map(renderCard)}
-        </section>
+        </SpotSection>
       )}
       {pocket.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="px-1 text-sm font-extrabold text-mute">口袋名單</h3>
+        <SpotSection id={`${trip.id}:pocket`} title="口袋名單" count={pocket.length}>
           {pocket.map(renderCard)}
-        </section>
+        </SpotSection>
       )}
       {spots.length > 0 && shown.length === 0 && <p className="py-8 text-center text-sm font-bold text-mute">沒有符合條件的地點</p>}
 

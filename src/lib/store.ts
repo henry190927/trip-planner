@@ -9,6 +9,9 @@ interface PrefsState {
   checked: Record<string, string[]>
   /** tripId → 行程動態已經看到第幾版 */
   seen: Record<string, number>
+  /** 收起來的區塊（例如 `${tripId}:planned`） */
+  collapsed: string[]
+  toggleCollapsed: (key: string) => void
   setViewer: (tripId: string, travelerId: string | undefined) => void
   markSeen: (tripId: string, version: number) => void
   toggleChecked: (tripId: string, itemId: string) => void
@@ -36,6 +39,9 @@ export const usePrefs = create<PrefsState>()(
       viewer: {},
       checked: {},
       seen: {},
+      collapsed: [],
+      toggleCollapsed: (key) =>
+        set((s) => ({ collapsed: s.collapsed.includes(key) ? s.collapsed.filter((k) => k !== key) : [...s.collapsed, key] })),
       markSeen: (tripId, version) => set((s) => (version > (s.seen[tripId] ?? -1) ? { seen: { ...s.seen, [tripId]: version } } : s)),
       setViewer: (tripId, travelerId) => set((s) => ({ viewer: { ...s.viewer, [tripId]: travelerId } })),
       toggleChecked: (tripId, itemId) =>
