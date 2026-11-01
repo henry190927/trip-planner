@@ -56,8 +56,9 @@ export default function TimelineItem({
   /** 選了「遇到狀況」時：沒有對應備案的項目淡化 */
   scenario?: Trigger
 }) {
-  // 有連到地點清單就用清單裡那筆（在地點清單補的確切連結，行程卡片上也會用到）
-  const mapPlace = (item.spotId && trip.spots?.find((s) => s.id === item.spotId)?.place) || item.place
+  // 地點清單那筆和項目自己的，哪個有確切連結就用哪個；都沒有就用清單那筆
+  const spotPlace = item.spotId ? trip.spots?.find((s) => s.id === item.spotId)?.place : undefined
+  const mapPlace = [spotPlace, item.place].find((p) => p?.mapLink) ?? spotPlace ?? item.place
   const dimmed = scenario && !item.alternatives?.some((a) => a.trigger === scenario && !a.original)
   const { Icon, bg } = kinds[item.kind]
   const Art = item.tentative ? undefined : accentArt[item.kind]

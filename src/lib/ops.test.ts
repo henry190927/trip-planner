@@ -295,3 +295,13 @@ describe('update_checklist_item', () => {
     expect(r.changes[0].text).toBe('清單「App 與網路」：Kakao T 註冊、綁卡 → Kakao T 註冊（不綁卡，直接刷實體卡）')
   })
 })
+
+describe('update_spot 只補地圖連結', () => {
+  it('place 只給 mapLink，名稱、韓文名、搜尋字都保留', () => {
+    const r = applyOps(seoul2026, [{ op: 'update_spot', ref: 'miss-jokbal', spotChanges: { place: { mapLink: 'https://naver.me/miss' } } }])
+    expect(r.errors).toEqual([])
+    const place = r.trip.spots!.find((s) => s.id === 'miss-jokbal')!.place
+    expect(place).toMatchObject({ name: 'MISS 豬腳 弘大店', local: '미쓰족발 홍대본점', mapQuery: '미쓰족발 홍대본점', mapLink: 'https://naver.me/miss' })
+    expect(r.changes[0].text).toBe('地點清單：MISS 豬腳 弘大店：地圖連結')
+  })
+})

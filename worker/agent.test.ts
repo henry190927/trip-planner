@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trips } from '../src/trips'
-import { checkAgentOps, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, type ChatEvent } from './agent'
+import { checkAgentOps, linkKey, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, urlsIn, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -167,21 +167,44 @@ describe('私人小任務不給小樹看', () => {
 })
 
 describe('checkAgentOps', () => {
-  const spot = (extra: Record<string, unknown> = {}) => ({ op: 'add_spot', spot: { place: { name: '橋村炸雞', mapLink: 'https://naver.me/fake' }, category: 'food', ...extra } })
+  const spot = (extra: Record<string, unknown> = {}, mapLink = 'https://naver.me/fake') => ({
+    op: 'add_spot',
+    spot: { place: { name: '橋村炸雞', mapLink }, category: 'food', ...extra },
+  })
+  const allow = (...urls: string[]) => new Map(urls.map((u) => [linkKey(u), u] as const))
 
   it('新地點沒有地區就退回', () => {
-    expect(checkAgentOps([spot()], new Set()).problems[0]).toContain('要填 area')
-    expect(checkAgentOps([spot({ area: '弘大' })], new Set()).problems).toEqual([])
+    expect(checkAgentOps([spot()], allow()).problems[0]).toContain('要填 area')
+    expect(checkAgentOps([spot({ area: '弘大' })], allow()).problems).toEqual([])
   })
 
   it('地圖連結只留搜尋結果或使用者給的；其他拿掉並說明', () => {
     const ops = [spot({ area: '弘大' })]
-    const r = checkAgentOps(ops, new Set(['https://naver.me/real']))
+    const r = checkAgentOps(ops, allow('https://naver.me/real'))
     expect((ops[0].spot.place as { mapLink?: string }).mapLink).toBeUndefined()
     expect(r.notes[0]).toContain('https://naver.me/fake')
     const kept = [spot({ area: '弘大' })]
-    checkAgentOps(kept, new Set(['https://naver.me/fake']))
+    checkAgentOps(kept, allow('https://naver.me/fake'))
     expect((kept[0].spot.place as { mapLink?: string }).mapLink).toBe('https://naver.me/fake')
+  })
+
+  it('使用者貼的連結沒有 https:// 也認得，存成完整網址（實際發生過：被當成編造的而拿掉）', () => {
+    const fromUser = allow(...urlsIn('這間的 Naver 連結 naver.me/5AbCdEf 幫我更新'))
+    const ops = [spot({ area: '弘大' }, 'https://naver.me/5AbCdEf/')]
+    const r = checkAgentOps(ops, fromUser)
+    expect(r.notes).toEqual([])
+    expect((ops[0].spot.place as { mapLink?: string }).mapLink).toBe('https://naver.me/5AbCdEf')
+  })
+})
+
+describe('urlsIn', () => {
+  it('抓得到有 https 的網址、沒有 https 的地圖分享連結；一般文字不會被當成網址', () => {
+    expect(urlsIn('https://naver.me/AAA 和 naver.me/BBB、（map.naver.com/p/entry/place/123）')).toEqual([
+      'https://naver.me/AAA',
+      'https://naver.me/BBB',
+      'https://map.naver.com/p/entry/place/123',
+    ])
+    expect(urlsIn('營業到 23:00/週二休')).toEqual([])
   })
 })
 

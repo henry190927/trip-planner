@@ -242,6 +242,7 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 現在時間（旅程當地）：${todayIn(trip.timezone)}。
 - 現在用這支手機的是：${me ? `「${me.name}」（id: ${me.id}）` : '還沒選（兩個人都可能）'}。
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。呼叫 propose_changes 之前不要提到「套用」按鈕；等工具回傳 ok: true 之後，才請使用者按「套用」。
+- 使用者貼了地圖 App 的分享連結（例如 naver.me/…）時，把它原樣填進對應地點的 place.mapLink（update_spot 時 spotChanges.place 只要給 mapLink 就好，其他欄位會沿用）。
 - 地圖連結（mapLink）只能用搜尋結果裡真的出現過、或使用者貼的網址，不要自己組 Naver 連結；沒有就只填 local 與 mapQuery（用當地語言的完整店名，分店名也寫上，地圖 App 才搜得到正確的那間）。回答的文字裡也不要附自己組的地圖網址；要給地圖，就請使用者在地點清單或行程卡片按「地圖」（會用店名直接在地圖 App 裡搜尋）。
 - 清單（checklist）可以用 add_checklist_item 新增、update_checklist_item 改文字、remove_checklist_item 刪除（ref 填目前的項目文字）。
 - 修改被系統退回時，照錯誤訊息直接修正再送，回答裡不要提到退回、重試或道歉，只講最後的結果。
@@ -321,12 +322,15 @@ export function searchDigest(results: SearchResult[]) {
  * - 新地點一定要有地區
  * - 地圖連結只能用搜尋結果裡出現過、或使用者自己貼的網址；其他的（多半是模型編的）拿掉，改用店名搜尋
  */
-export function checkAgentOps(raw: unknown, allowedLinks: Set<string>) {
+export function checkAgentOps(raw: unknown, allowedLinks: Map<string, string>) {
   const problems: string[] = []
   const notes: string[] = []
   const stripLink = (place: unknown) => {
     const p = place as { mapLink?: unknown } | null | undefined
-    if (p && typeof p === 'object' && typeof p.mapLink === 'string' && !allowedLinks.has(p.mapLink)) {
+    if (p && typeof p === 'object' && typeof p.mapLink === 'string' && allowedLinks.has(linkKey(p.mapLink))) {
+      // 使用者貼的可能沒有 https://：存成完整網址
+      p.mapLink = allowedLinks.get(linkKey(p.mapLink))
+    } else if (p && typeof p === 'object' && typeof p.mapLink === 'string') {
       notes.push(`地圖連結 ${p.mapLink} 不是搜尋結果或使用者給的網址，已拿掉，改用 mapQuery 搜尋`)
       delete p.mapLink
     }
@@ -369,7 +373,22 @@ export function transitLengthChanges(before: Trip, after: Trip) {
   })
 }
 
-const urlsIn = (text: string) => text.match(/https?:\/\/[^\s)）」]+/g) ?? []
+// 地圖 App 的分享連結常被貼成沒有 https:// 的樣子（naver.me/xxxx），一樣要認得
+const MAP_HOSTS = /^(naver\.me|map\.naver\.com|m\.map\.naver\.com|m\.place\.naver\.com|place\.naver\.com|place\.map\.kakao\.com|map\.kakao\.com|kko\.to|maps\.app\.goo\.gl|goo\.gl|maps\.google\.com|google\.com)\//i
+/** 比對用：去掉 https://、www.、結尾的斜線 */
+export const linkKey = (url: string) => url.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '').toLowerCase()
+export function urlsIn(text: string) {
+  // 網址只含英數與網址符號：遇到中文、全形標點、括號就停
+  const chars = "[\\w\\-.~:/?#@!$&'*+,;=%]"
+  const withScheme = text.match(new RegExp(`https?://${chars}+`, 'gi')) ?? []
+  const bare = (text.match(new RegExp(`(?:www\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)+/${chars}*`, 'gi')) ?? []).filter((u) =>
+    MAP_HOSTS.test(u.replace(/^www\./i, '')),
+  )
+  // 同一個網址只留一個（有 https 的那個優先）
+  const found = new Map<string, string>()
+  for (const u of [...withScheme, ...bare.map((b) => `https://${b}`)]) if (!found.has(linkKey(u))) found.set(linkKey(u), u)
+  return [...found.values()]
+}
 
 const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
 
@@ -385,7 +404,9 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
   // 系統提示含整份行程，只產生一次（每一步都重新產生很吃 CPU）
   const prompt = systemPrompt(visible, viewer)
   // 可以用的地圖連結：使用者貼的、搜尋結果裡出現過的
-  const allowedLinks = new Set(messages.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)))
+  const allowedLinks = new Map(
+    messages.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)).map((u) => [linkKey(u), u] as const),
+  )
   // 說了「套用」卻沒有產生修改時要補一句，免得使用者找不到按鈕
   let proposals = 0
   let saidApply = false
@@ -446,7 +467,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           response = { error: '搜尋暫時無法使用。請告訴使用者這次沒能上網查證，憑既有知識回答的部分要標明「未查證」，或建議稍後再問。' }
         } else {
           response = { results: found.results }
-          for (const r of found.results) if ('results' in r) for (const x of r.results) allowedLinks.add(x.url)
+          for (const r of found.results) if ('results' in r) for (const x of r.results) allowedLinks.set(linkKey(x.url), x.url)
           searched.push(...found.results)
         }
       } else if (call.name === 'find_free_time') {
@@ -463,6 +484,8 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
       } else if (call.name === 'propose_changes') {
         const normalized = normalizeOps(args.operations)
         const checked = checkAgentOps(normalized, allowedLinks)
+        // 拿掉的連結要讓使用者看到，不要默默消失
+        if (checked.notes.length) emit({ type: 'status', text: `有 ${checked.notes.length} 個地圖連結不是你給的網址，沒有存（請貼地圖 App 的分享連結）` })
         const parsed = opsSchema.safeParse(normalized)
         if (checked.problems.length) {
           response = { ok: false, errors: checked.problems }
