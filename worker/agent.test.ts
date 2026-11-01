@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { trips } from '../src/trips'
-import { checkAgentOps, normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
+import { checkAgentOps, newOverlaps, normalizeOps, runAgent, searchDigest, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -204,5 +204,19 @@ describe('說了「套用」卻沒有產生修改', () => {
     const { events } = await run(env)
     expect(events.some((e) => e.type === 'proposal')).toBe(true)
     expect(events.filter((e) => e.type === 'text').map((e) => e.delta).join('')).not.toContain('沒有成功產生修改')
+  })
+})
+
+describe('newOverlaps', () => {
+  it('擋下這次新造成的重疊，例如在她出發去場館的同時排兩個人去逛街', async () => {
+    const { applyOps } = await import('../src/lib/ops')
+    const before = trips[0]
+    const add = (who?: string[]) =>
+      applyOps(before, [{ op: 'add_item', date: '2026-11-07', item: { time: '15:30', end: '16:00', kind: 'shopping', title: '逛小店', ...(who && { who }) } }]).trip
+    expect(newOverlaps(before, add()).join()).toContain('「弘大 → KBS Arena」和 15:30「逛小店」')
+    // 只排給我：我 15:30 已經有自由時間，還是衝突
+    expect(newOverlaps(before, add(['me'])).join()).toContain('自由時間')
+    // 原本就沒有重疊的行程不會被誤報
+    expect(newOverlaps(before, before)).toEqual([])
   })
 })

@@ -19,18 +19,18 @@ describe('freeWindows', () => {
   it('她 11/7：取票、演唱會、散場會合把一天切成幾段', () => {
     const w = freeWindows(day('2026-11-07'), { who: 'her' })
     expect(w.map((x) => [x.from, x.to, x.minutes])).toEqual([
-      ['00:00', '15:30', 930],
-      ['15:30', '18:00', 150],
+      ['00:00', '16:15', 975],
+      ['16:15', '18:00', 105],
       ['18:00', '20:30', 150],
       ['20:30', null, null],
     ])
-    expect(w[0].flexible).toContain('14:45「弘大 → KBS Arena」')
+    expect(w[0].flexible).toContain('15:30「弘大 → KBS Arena」')
   })
 
   it('我 11/7：她的演唱會不算我的固定行程；after 從現在開始算', () => {
     const w = freeWindows(day('2026-11-07'), { who: 'me', after: '15:00' })
     expect(w[0]).toMatchObject({ from: '15:00', fromLabel: '現在', to: '20:30', minutes: 330 })
-    expect(w[0].flexible).toEqual(['19:45「出發去 KBS Arena 接她」'])
+    expect(w[0].flexible).toEqual(['15:00「逛 STAND OIL 弘大旗艦店」', '15:30「自由時間：京義線林蔭道・望遠市場」', '19:45「出發去 KBS Arena 接她」'])
   })
 })
 
@@ -45,20 +45,20 @@ describe('shiftItems', () => {
 
   it('只挪某位旅伴自己的彈性項目，全員一起的與固定的不動，結束時間一起挪', () => {
     const d = day('2026-11-07')
-    const r = shiftItems(d, '14:45', 5, { who: 'me' })
+    const r = shiftItems(d, '15:30', 5, { who: 'me' })
     // 挪到下一個跟我有關的固定行程（兩個人的散場會合）之前
     expect(r).toEqual({ moved: 2, until: '20:30', errors: [] })
-    expect(at(d, '自由時間：京義線林蔭道・望遠市場').time).toBe('14:50')
+    expect(at(d, '自由時間：京義線林蔭道・望遠市場').time).toBe('15:35')
     expect(at(d, '出發去 KBS Arena 接她')).toMatchObject({ time: '19:50', end: '20:30' })
     expect(at(d, '散場會合').time).toBe('20:30')
-    expect(at(d, '弘大 → KBS Arena').time).toBe('14:45')
+    expect(at(d, '弘大 → KBS Arena').time).toBe('15:30')
     expect(at(d, '一起搭地鐵回弘大').time).toBe('20:40')
   })
 
   it('預設只挪到下一個固定行程之前，後面的不受影響', () => {
     const d = day('2026-11-07')
     const r = shiftItems(d, '12:00', -30)
-    expect(r).toMatchObject({ until: '15:30', errors: [] })
+    expect(r).toMatchObject({ until: '16:15', errors: [] })
     expect(at(d, '午餐・韓牛燒肉「朝鮮火爐烤肉」').time).toBe('11:30')
     expect(at(d, 'MISS 豬腳宵夜').time).toBe('21:30')
   })
@@ -84,7 +84,7 @@ describe('shift_items 動作', () => {
     const r = applyOps(seoul2026, [{ op: 'shift_items', date: '2026-11-07', from: '12:00', minutes: -30 }])
     expect(r.errors).toEqual([])
     expect(r.trip.days[1].items[0]).toMatchObject({ time: '11:30', title: '午餐・韓牛燒肉「朝鮮火爐烤肉」' })
-    expect(r.changes[0].text).toBe('11/7 12:00–15:30 的彈性行程提前 30 分（6 項）')
+    expect(r.changes[0].text).toBe('11/7 12:00–16:15 的彈性行程提前 30 分（7 項）')
   })
 
   it('沒有東西可以挪、或撞到固定行程時回報錯誤', () => {

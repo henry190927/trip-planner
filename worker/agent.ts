@@ -1,6 +1,6 @@
 import { itemKinds, opsSchema, spotCategories, triggers } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
-import { freeWindows } from '../src/lib/plan'
+import { freeWindows, overlaps } from '../src/lib/plan'
 import { hidePrivate } from '../src/lib/visibility'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
@@ -234,7 +234,7 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 你推薦但使用者還沒決定的項目設 tentative: true；沒有查證到的資訊（例如營業時間）寫進 verify。
 - 時間用 HH:MM、旅程當地時間；日期用 YYYY-MM-DD，必須在旅程期間內。
 - 只屬於某位旅伴的項目才填 who；routeId 只能用既有的路線 id。
-- 排行程時考慮移動時間與兩人分頭行動的時段，不要排到時間衝突。
+- 排行程時考慮移動時間與兩人分頭行動的時段，不要排到時間衝突：同一個人同一時間只能有一件事（系統會擋下重疊的修改）。兩個人分頭行動的時段，新加的項目要用 who 指定給有空的那個人。
 - 「地點清單」（spots）收已排進行程的地點與還沒排的口袋名單。使用者丟店家連結、或說「想去但還沒決定」時，用 add_spot 加進清單，不要直接排進行程。
 - 加地點時一定要填 area（所在地區），而且沿用清單裡已經有的地區叫法（例如「弘大」），不要另外取新名字；真的在別區才用新的地區名。
 - 把清單裡的地點排進行程時，行程項目的 spotId 填那個地點的 id；同一個地點的營業時間、交通等資訊寫在地點上，不要重複寫在行程項目裡。
@@ -317,6 +317,16 @@ export function checkAgentOps(raw: unknown, allowedLinks: Set<string>) {
       for (const holder of [op.spot, op.item, op.alternative, op.changes, op.spotChanges]) if (holder) stripLink(holder.place)
     }
   return { problems, notes }
+}
+
+/** 這次修改新造成的時間重疊（原本就有的不算，免得被舊資料卡住） */
+export function newOverlaps(before: Trip, after: Trip) {
+  return after.days.flatMap((day) => {
+    const old = new Set(overlaps(before.days.find((d) => d.date === day.date) ?? { ...day, items: [] }))
+    return overlaps(day)
+      .filter((o) => !old.has(o))
+      .map((o) => `${day.date.slice(5).replace('-', '/')} ${o}`)
+  })
 }
 
 const urlsIn = (text: string) => text.match(/https?:\/\/[^\s)）」]+/g) ?? []
@@ -420,8 +430,15 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
           }
         } else {
           const applied = applyOps(stored.trip, parsed.data)
+          const clashes = applied.errors.length ? [] : newOverlaps(stored.trip, applied.trip)
           if (applied.errors.length) {
             response = { ok: false, errors: applied.errors }
+          } else if (clashes.length) {
+            response = {
+              ok: false,
+              errors: clashes.map((c) => `時間重疊（同一個人同時有兩件事）：${c}`),
+              hint: '請改時間、用 who 只排給有空的人，或一起調整其他彈性項目；固定行程不能動',
+            }
           } else {
             emit({
               type: 'proposal',
