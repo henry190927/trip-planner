@@ -179,7 +179,7 @@ describe('備案', () => {
     const { alternatives: altsBack, ...restored } = item(back.trip, 'MISS 豬腳宵夜')
     expect(restored).toEqual(original)
     expect(altsBack).toEqual(item(base, 'MISS 豬腳宵夜').alternatives)
-    expect(back.changes[0].text).toContain('換回原本的安排')
+    expect(back.changes[0].text).toContain('換回原本排的')
   })
 
   it('沒寫時間的備案一直沿用目前的時間：換回來、改時間、再換過去，用的是新時間', () => {
@@ -208,12 +208,15 @@ describe('備案', () => {
     expect(list.indexOf('改去 MEGA COFFEE')).toBeLessThan(list.indexOf('一起搭地鐵回弘大') + 2)
   })
 
-  it('刪除備案；原本的安排不能刪；編號不存在會回報', () => {
+  it('刪除備案；「原本排的」也能刪（換上來的就是正式行程）；編號不存在會回報', () => {
     const base = withAlts().trip
     const r = applyOps(base, [{ op: 'remove_alternative', ...jokbal, index: 1 }])
     expect(item(r.trip, 'MISS 豬腳宵夜').alternatives!.map((a) => a.title)).toEqual(['外帶回住宿吃'])
     const there = applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 0 }]).trip
-    expect(applyOps(there, [{ op: 'remove_alternative', date: day2, title: '外帶回住宿吃', index: 0 }]).errors[0]).toContain('不能刪')
+    const dropped = applyOps(there, [{ op: 'remove_alternative', date: day2, title: '外帶回住宿吃', index: 0 }])
+    expect(dropped.errors).toEqual([])
+    expect(dropped.changes[0].text).toContain('的備案（原本排的）：MISS 豬腳宵夜')
+    expect(item(dropped.trip, '外帶回住宿吃').alternatives!.map((a) => a.title)).toEqual(['改去 MEGA COFFEE'])
     expect(applyOps(base, [{ op: 'use_alternative', ...jokbal, index: 5 }]).errors[0]).toContain('沒有第 6 個備案')
   })
 

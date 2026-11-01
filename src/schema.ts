@@ -24,7 +24,7 @@ export const itemKinds = ['flight', 'transit', 'stay', 'food', 'sight', 'shoppin
 /** 什麼情況下啟用備案 */
 export const triggers = ['full', 'closed', 'rain', 'tired', 'early', 'late', 'other'] as const
 
-/** 行程項目的備案。啟用時跟目前的內容交換，所以原本的安排會變成一個 original 的備案，隨時能換回來 */
+/** 行程項目的備案。啟用時跟目前的內容交換：換上來的就是行程，被換掉的變成備案（第一次換時標 original =「原本排的」），可以換回來也可以刪 */
 export const alternativeSchema = z.object({
   trigger: z.enum(triggers),
   /** 補充觸發條件，例如「排隊超過 30 分鐘」；trigger 是 other 時用來說明 */
@@ -38,7 +38,7 @@ export const alternativeSchema = z.object({
   spotId: z.string().optional(),
   routeId: z.string().optional(),
   note: z.string().optional(),
-  /** 這是原本的安排（啟用過備案後才會出現） */
+  /** 原本排的（第一次換成備案時，被換掉的那個） */
   original: z.boolean().optional(),
 })
 

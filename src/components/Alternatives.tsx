@@ -32,7 +32,7 @@ export const triggerIcons: Record<Trigger, LucideIcon> = {
 
 export function TriggerChip({ trigger, when, original }: { trigger: Trigger; when?: string; original?: boolean }) {
   const Icon = original ? Undo2 : triggerIcons[trigger]
-  const text = original ? '原本的安排' : trigger === 'other' && when ? when : `${triggerLabels[trigger]}${when ? `・${when}` : ''}`
+  const text = original ? '原本排的' : trigger === 'other' && when ? when : `${triggerLabels[trigger]}${when ? `・${when}` : ''}`
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-butter px-2 py-0.5 text-[11px] font-bold text-[#a8661c]">
       <Icon className="size-3" />
@@ -53,7 +53,7 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
     setStep('busy')
     setError('')
     try {
-      const summary = alt.original ? `換回原本的安排：${alt.title}` : `改用備案（${triggerLabels[alt.trigger]}）：${alt.title}`
+      const summary = alt.original ? `換回原本排的：${alt.title}` : `改用備案（${triggerLabels[alt.trigger]}）：${alt.title}`
       await applyDirect(trip.id, [{ op: 'use_alternative', date, title: item.title, time: item.time, index }], summary)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -94,10 +94,10 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
             className="inline-flex items-center gap-1 rounded-full bg-peach/50 px-3 py-1.5 text-xs font-bold text-peach-ink active:scale-95"
           >
             <Split className="size-3.5" />
-            {alt.original ? '換回原本的' : '改用這個'}
+            {alt.original ? '換回原本排的' : '改用這個'}
           </button>
         )}
-        {step === 'idle' && !alt.original && (
+        {step === 'idle' && (
           <button
             type="button"
             onClick={() => setStep('confirm-delete')}
@@ -170,7 +170,7 @@ export default function Alternatives({ item, date, trip, scenario }: { item: Ite
         className="inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1.5 text-xs font-bold text-ink active:scale-95"
       >
         <Split className="size-3.5" />
-        {item.usedAlternative ? `其他安排 ${alts.length}` : `備案 ${alts.length}`}
+        {`備案 ${alts.length}`}
         <ChevronDown className={`size-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence initial={false}>

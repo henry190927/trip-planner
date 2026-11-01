@@ -328,19 +328,19 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           break
         }
         if (op.op === 'remove_alternative') {
-          if (alt.original) {
-            errors.push(`${before} 的「原本的安排」不能刪，要先換回來`)
-            break
-          }
           item.alternatives = item.alternatives!.filter((_, i) => i !== op.index)
           if (item.alternatives.length === 0) delete item.alternatives
-          changes.push({ kind: 'remove', text: `${before} 的備案（${triggerLabels[alt.trigger]}）：${alt.title}`, date: op.date })
+          changes.push({
+            kind: 'remove',
+            text: `${before} 的備案（${alt.original ? '原本排的' : triggerLabels[alt.trigger]}）：${alt.title}`,
+            date: op.date,
+          })
           break
         }
         const chosen = switchToAlternative(item, op.index)
         changes.push({
           kind: 'update',
-          text: chosen.original ? `${before} 換回原本的安排：「${chosen.title}」` : `${before} 改用備案（${triggerLabels[chosen.trigger]}）：「${chosen.title}」`,
+          text: chosen.original ? `${before} 換回原本排的：「${chosen.title}」` : `${before} 改用備案（${triggerLabels[chosen.trigger]}）：「${chosen.title}」`,
           date: op.date,
         })
         break

@@ -17,7 +17,7 @@ import type { Item, ItemKind, Trigger, Trip } from '../types'
 import { href } from '../lib/router'
 import { Chip, MapButton, WhoChip } from './ui'
 import DriverCard from './DriverCard'
-import Alternatives, { TriggerChip } from './Alternatives'
+import Alternatives from './Alternatives'
 import { isFixed } from '../lib/plan'
 import TaskCheck from './TaskCheck'
 import { Bowl, Lightstick, ShoppingBag as BagArt } from './illustrations'
@@ -104,12 +104,6 @@ export default function TimelineItem({
               <Lock className="size-3" />
               固定
             </Chip>
-          )}
-          {item.usedAlternative && (
-            <span className="inline-flex items-center gap-1">
-              <span className="text-[11px] font-bold text-mute">已改用備案</span>
-              <TriggerChip trigger={item.usedAlternative.trigger} when={item.usedAlternative.when} />
-            </span>
           )}
         </div>
         {item.todo ? (
