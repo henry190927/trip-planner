@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   Shuffle,
   Split,
+  Trash2,
   Undo2,
   Users,
   type LucideIcon,
@@ -42,7 +43,7 @@ export function TriggerChip({ trigger, when, original }: { trigger: Trigger; whe
 
 function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; index: number; item: Item; date: string; trip: Trip }) {
   const applyDirect = useChat((s) => s.applyDirect)
-  const [step, setStep] = useState<'idle' | 'confirm' | 'busy'>('idle')
+  const [step, setStep] = useState<'idle' | 'confirm' | 'confirm-delete' | 'busy'>('idle')
   const [error, setError] = useState('')
   const spot = alt.spotId ? trip.spots?.find((s) => s.id === alt.spotId) : undefined
   // 有連到地點清單就用清單裡那筆（確切連結可能只補在清單上）
@@ -54,6 +55,17 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
     try {
       const summary = alt.original ? `換回原本的安排：${alt.title}` : `改用備案（${triggerLabels[alt.trigger]}）：${alt.title}`
       await applyDirect(trip.id, [{ op: 'use_alternative', date, title: item.title, time: item.time, index }], summary)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStep('idle')
+    }
+  }
+
+  const remove = async () => {
+    setStep('busy')
+    setError('')
+    try {
+      await applyDirect(trip.id, [{ op: 'remove_alternative', date, title: item.title, time: item.time, index }], `刪除備案：${alt.title}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setStep('idle')
@@ -85,6 +97,27 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
             {alt.original ? '換回原本的' : '改用這個'}
           </button>
         )}
+        {step === 'idle' && !alt.original && (
+          <button
+            type="button"
+            onClick={() => setStep('confirm-delete')}
+            aria-label={`刪除備案「${alt.title}」`}
+            className="ml-auto flex size-8 items-center justify-center rounded-full text-mute active:bg-cream"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+        {step === 'confirm-delete' && (
+          <>
+            <span className="text-xs font-bold">刪掉這個備案？</span>
+            <button type="button" onClick={() => void remove()} className="rounded-full bg-peach-ink px-3 py-1.5 text-xs font-bold text-white">
+              刪除
+            </button>
+            <button type="button" onClick={() => setStep('idle')} className="rounded-full px-2 py-1.5 text-xs font-bold text-mute">
+              取消
+            </button>
+          </>
+        )}
         {step === 'confirm' && (
           <>
             <button
@@ -102,7 +135,7 @@ function AlternativeRow({ alt, index, item, date, trip }: { alt: Alternative; in
         {step === 'busy' && (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-mute">
             <LoaderCircle className="size-3.5 animate-spin" />
-            換成備案中…
+            處理中…
           </span>
         )}
       </div>
