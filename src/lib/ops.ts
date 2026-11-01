@@ -266,7 +266,8 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         changes.push({ kind: 'add', text: `清單「${op.group}」：${op.label}` })
         break
       }
-      case 'remove_checklist_item': {
+      case 'remove_checklist_item':
+      case 'update_checklist_item': {
         const matches = trip.checklist.flatMap((g) =>
           (op.group && g.title !== op.group ? [] : g.items).filter((i) => i.id === op.ref || i.label === op.ref).map((i) => ({ g, i })),
         )
@@ -279,6 +280,12 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           break
         }
         const [{ g, i }] = matches
+        if (op.op === 'update_checklist_item') {
+          // id 不變，這支手機上的勾選狀態也還在
+          changes.push({ kind: 'update', text: `清單「${g.title}」：${i.label} → ${op.label}` })
+          i.label = op.label
+          break
+        }
         g.items = g.items.filter((x) => x !== i)
         changes.push({ kind: 'remove', text: `清單「${g.title}」：${i.label}` })
         break
