@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import { Check, LoaderCircle, Trash2 } from 'lucide-react'
+import { Check, LoaderCircle, Pencil, Trash2 } from 'lucide-react'
 import type { Trip } from '../types'
 import { useChat } from '../lib/chatStore'
 import { usePrefs } from '../lib/store'
@@ -17,15 +17,20 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
   const count = trip.checklist.reduce((n, g) => n + g.items.filter((i) => done.has(i.id)).length, 0)
   const progress = total ? count / total : 0
   const applyDirect = useChat((s) => s.applyDirect)
-  // 正在確認刪除的項目
-  const [removing, setRemoving] = useState<{ id: string; busy?: boolean; error?: string }>()
-  const remove = async (group: string, id: string, label: string) => {
-    setRemoving({ id, busy: true })
+  // 正在編輯或確認刪除的項目（同一時間只有一項）
+  const [action, setAction] = useState<{ id: string; mode: 'edit' | 'delete'; text?: string; busy?: boolean; error?: string }>()
+  const run = async (group: string, id: string, label: string) => {
+    if (!action) return
+    const text = action.text?.trim()
+    if (action.mode === 'edit' && (!text || text === label)) return setAction(undefined)
+    setAction({ ...action, busy: true, error: undefined })
     try {
-      await applyDirect(trip.id, [{ op: 'remove_checklist_item', ref: id, group }], `刪除清單項目：${label}`)
-      setRemoving(undefined)
+      if (action.mode === 'edit')
+        await applyDirect(trip.id, [{ op: 'update_checklist_item', ref: id, group, label: text }], `修改清單項目：${text}`)
+      else await applyDirect(trip.id, [{ op: 'remove_checklist_item', ref: id, group }], `刪除清單項目：${label}`)
+      setAction(undefined)
     } catch (e) {
-      setRemoving({ id, error: e instanceof Error ? e.message : String(e) })
+      setAction({ ...action, busy: false, error: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -50,7 +55,7 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
               transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
             />
           </div>
-          <p className="mt-2 text-[11px] text-mute">勾選紀錄只存在這支手機上；刪除項目兩個人都會看到。</p>
+          <p className="mt-2 text-[11px] text-mute">勾選紀錄只存在這支手機上；編輯、刪除項目兩個人都會看到。</p>
         </div>
       </Card>
 
@@ -60,40 +65,83 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
           <Card className="divide-y-2 divide-cream p-0">
             {group.items.map((item) => {
               const on = done.has(item.id)
-              const confirming = removing?.id === item.id
+              const current = action?.id === item.id ? action : undefined
+              const editing = current?.mode === 'edit'
               return (
                 <div key={item.id}>
                   <div className="flex items-center">
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={on}
-                      onClick={() => toggle(trip.id, item.id)}
-                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 text-left active:bg-cream/60"
-                    >
-                      <motion.span
-                        animate={{ scale: on ? [1, 1.25, 1] : 1, rotate: on ? [0, -10, 0] : 0 }}
-                        transition={{ duration: 0.3 }}
-                        className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 ${
-                          on ? `border-transparent ${gradient}` : 'border-butter bg-card'
-                        }`}
+                    {editing ? (
+                      <form
+                        className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          void run(group.title, item.id, item.label)
+                        }}
                       >
-                        {on && <Check className="size-4 text-ink" strokeWidth={3.2} />}
-                      </motion.span>
-                      <span className={`text-sm font-bold transition-colors ${on ? 'text-mute line-through' : ''}`}>{item.label}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRemoving(confirming ? undefined : { id: item.id })}
-                      aria-label={`刪除「${item.label}」`}
-                      className="mr-2 flex size-9 shrink-0 items-center justify-center rounded-full text-mute active:bg-cream"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                        <input
+                          autoFocus
+                          value={current.text ?? ''}
+                          onChange={(e) => setAction({ ...current, text: e.target.value })}
+                          aria-label={`修改「${item.label}」`}
+                          className="min-w-0 flex-1 rounded-2xl border-2 border-sky bg-card px-3 py-1.5 text-[16px] outline-none"
+                        />
+                        {current.busy ? (
+                          <LoaderCircle className="size-4 animate-spin text-mute" />
+                        ) : (
+                          <>
+                            <button type="submit" className="rounded-full bg-sky/40 px-3 py-1 text-xs font-bold text-sky-ink">
+                              儲存
+                            </button>
+                            <button type="button" onClick={() => setAction(undefined)} className="px-1 text-xs font-bold text-mute">
+                              取消
+                            </button>
+                          </>
+                        )}
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={on}
+                        onClick={() => toggle(trip.id, item.id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 text-left active:bg-cream/60"
+                      >
+                        <motion.span
+                          animate={{ scale: on ? [1, 1.25, 1] : 1, rotate: on ? [0, -10, 0] : 0 }}
+                          transition={{ duration: 0.3 }}
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 ${
+                            on ? `border-transparent ${gradient}` : 'border-butter bg-card'
+                          }`}
+                        >
+                          {on && <Check className="size-4 text-ink" strokeWidth={3.2} />}
+                        </motion.span>
+                        <span className={`text-sm font-bold transition-colors ${on ? 'text-mute line-through' : ''}`}>{item.label}</span>
+                      </button>
+                    )}
+                    {!editing && (
+                      <div className="mr-2 flex shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setAction({ id: item.id, mode: 'edit', text: item.label })}
+                          aria-label={`編輯「${item.label}」`}
+                          className="flex size-9 items-center justify-center rounded-full text-mute active:bg-cream"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAction(current?.mode === 'delete' ? undefined : { id: item.id, mode: 'delete' })}
+                          aria-label={`刪除「${item.label}」`}
+                          className="flex size-9 items-center justify-center rounded-full text-mute active:bg-cream"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {confirming && (
+                  {current?.mode === 'delete' && (
                     <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-peach/30 px-3 py-2 text-xs font-bold">
-                      {removing.busy ? (
+                      {current.busy ? (
                         <span className="inline-flex items-center gap-1 text-mute">
                           <LoaderCircle className="size-3.5 animate-spin" />
                           刪除中…
@@ -103,19 +151,19 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
                           <span className="flex-1">從清單刪掉「{item.label}」？</span>
                           <button
                             type="button"
-                            onClick={() => void remove(group.title, item.id, item.label)}
+                            onClick={() => void run(group.title, item.id, item.label)}
                             className="rounded-full bg-peach-ink px-3 py-1 text-white"
                           >
                             刪除
                           </button>
-                          <button type="button" onClick={() => setRemoving(undefined)} className="px-1 text-mute">
+                          <button type="button" onClick={() => setAction(undefined)} className="px-1 text-mute">
                             取消
                           </button>
                         </>
                       )}
-                      {removing.error && <p className="basis-full text-peach-ink">{removing.error}</p>}
                     </div>
                   )}
+                  {current?.error && <p className="mx-4 mb-3 text-xs font-bold text-peach-ink">{current.error}</p>}
                 </div>
               )
             })}

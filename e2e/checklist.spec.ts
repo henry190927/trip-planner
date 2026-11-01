@@ -4,7 +4,7 @@ import { seoul2026 } from '../src/trips/seoul-2026-11'
 
 const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
 
-test('清單項目可以刪除：要再確認一次，勾選照常', async ({ page }) => {
+test('清單項目可以刪除（要再確認）、改文字（勾選狀態留著）', async ({ page }) => {
   let current = seoul2026
   let version = 32
   const sent: Op[][] = []
@@ -33,4 +33,14 @@ test('清單項目可以刪除：要再確認一次，勾選照常', async ({ pa
   const papago = page.getByRole('checkbox', { name: 'Papago 翻譯' })
   await papago.click()
   await expect(papago).toHaveAttribute('aria-checked', 'true')
+
+  // 改文字：勾選狀態留著
+  await page.getByRole('button', { name: '編輯「Papago 翻譯」' }).click()
+  const input = page.getByRole('textbox', { name: '修改「Papago 翻譯」' })
+  await input.fill('Papago 翻譯（下載離線韓文包）')
+  await page.getByRole('button', { name: '儲存' }).click()
+  const renamed = page.getByRole('checkbox', { name: 'Papago 翻譯（下載離線韓文包）' })
+  await expect(renamed).toHaveAttribute('aria-checked', 'true')
+  expect(sent[1]).toEqual([{ op: 'update_checklist_item', ref: 'papago', group: 'App 與網路', label: 'Papago 翻譯（下載離線韓文包）' }])
+  await page.screenshot({ path: 'e2e/screenshots/list.png' })
 })

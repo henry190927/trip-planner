@@ -282,3 +282,13 @@ describe('remove_checklist_item', () => {
     expect(ok.errors).toEqual([])
   })
 })
+
+describe('update_checklist_item', () => {
+  it('改文字，id 不變（勾選狀態留著）', () => {
+    const r = applyOps(seoul2026, [{ op: 'update_checklist_item', ref: 'Kakao T 註冊、綁卡', label: 'Kakao T 註冊（不綁卡，直接刷實體卡）' }])
+    expect(r.errors).toEqual([])
+    const item = r.trip.checklist.flatMap((g) => g.items).find((i) => i.id === 'kakaot')!
+    expect(item.label).toBe('Kakao T 註冊（不綁卡，直接刷實體卡）')
+    expect(r.changes[0].text).toBe('清單「App 與網路」：Kakao T 註冊、綁卡 → Kakao T 註冊（不綁卡，直接刷實體卡）')
+  })
+})
