@@ -403,11 +403,16 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           errors.push(`地點清單裡找不到「${op.ref}」`)
           break
         }
+        const placeBefore = JSON.stringify({ ...(spot.place as object), mapLink: undefined })
         for (const [key, value] of Object.entries(op.spotChanges)) {
           if (value === null) delete spot[key]
+          // 地點資料只給一部分時跟原本的合併（例如只補 mapLink）
+          else if (key === 'place') spot.place = { ...(spot.place as object), ...(value as object) }
           else spot[key] = value
         }
-        const fields = Object.keys(op.spotChanges).map((k) => spotFieldNames[k] ?? k)
+        // 只動到地圖連結時寫清楚，免得以為名稱也改了
+        const onlyLink = JSON.stringify({ ...(spot.place as object), mapLink: undefined }) === placeBefore
+        const fields = Object.keys(op.spotChanges).map((k) => (k === 'place' && onlyLink ? '地圖連結' : (spotFieldNames[k] ?? k)))
         changes.push({ kind: 'update', text: `地點清單：${(spot as Spot).place.name}：${fields.join('、')}` })
         break
       }

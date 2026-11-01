@@ -256,7 +256,8 @@ const itemChangesSchema = z
 /** 修改既有地點時要改的欄位；值給 null 代表刪掉那個欄位 */
 const spotChangesSchema = z
   .object({
-    place: placeSchema,
+    /** 只給要改的部分（例如只給 mapLink），其他沿用原本的 */
+    place: placeSchema.partial(),
     category: z.enum(spotCategories),
     area: z.string().nullable(),
     hours: z.string().nullable(),
