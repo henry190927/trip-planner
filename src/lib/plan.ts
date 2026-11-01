@@ -69,7 +69,6 @@ export function shiftItems(
   minutes: number,
   { who, until }: { who?: string; until?: string } = {},
 ): { moved: number; until: string | null; errors: string[] } {
-  const errors: string[] = []
   const timed = day.items.filter(local) as (Item & { time: string })[]
   const anchors = timed.filter(isFixed)
   const stop =
@@ -81,6 +80,13 @@ export function shiftItems(
       (stop === null || toMin(i.time) < toMin(stop)) &&
       (!who || ownedBy(i, who)),
   )
+  const errors = moveItems(targets, minutes, anchors)
+  return { moved: errors.length ? 0 : targets.length, until: stop, errors }
+}
+
+/** 把 targets 一起挪 minutes 分鐘；任何一個會越過跟它有共同旅伴的固定行程就整批不挪、回報原因 */
+function moveItems(targets: (Item & { time: string })[], minutes: number, anchors: (Item & { time: string })[], dryRun = false) {
+  const errors: string[] = []
   const plans = targets.map((item) => {
     const start = toMin(item.time) + minutes
     const end = item.end ? toMin(item.end) + minutes : undefined
@@ -96,12 +102,46 @@ export function shiftItems(
       errors.push(`「${item.title}」挪到 ${toHhmm(start)} 會早於固定行程「${wall.title}」${wall.end ? `結束（${wall.end}）` : `（${wall.time}）`}`)
     return { item, start, end }
   })
-  if (errors.length) return { moved: 0, until: stop, errors }
-  for (const { item, start, end } of plans) {
-    item.time = toHhmm(start)
-    if (end !== undefined) item.end = toHhmm(end)
+  if (!errors.length && !dryRun)
+    for (const { item, start, end } of plans) {
+      item.time = toHhmm(start)
+      if (end !== undefined) item.end = toHhmm(end)
+    }
+  return errors
+}
+
+/**
+ * 插入新項目前先騰出空間（骨牌式、每個人各一條線）：在它之後的彈性項目，只有被同一個人的前一件事蓋到才往後推；
+ * 兩個人一起的項目要等兩個人都空出來。中間有空檔就吸收掉，不會無謂地動到後面的行程。
+ * 被推的項目不能越過跟它有共同旅伴的固定行程，否則整批不動、回報原因。新項目本身不會加進 day。
+ */
+export function makeRoom(
+  day: Day,
+  item: Item,
+  travelers: string[],
+): { moved: { title: string; from: string; to: string; private?: boolean }[]; errors: string[] } {
+  if (!item.time || !item.end || item.tzLabel) return { moved: [], errors: [] }
+  const timed = day.items.filter(local) as (Item & { time: string })[]
+  const anchors = timed.filter(isFixed)
+  const people = (i: Item) => i.who ?? travelers
+  // 每個人從什麼時候開始有空
+  const free = new Map(people(item).map((p) => [p, toMin(item.end!)]))
+  const targets = timed
+    .filter((i) => !isFixed(i) && shareSomeone(i, item) && toMin(i.time) >= toMin(item.time!))
+    .sort((x, y) => toMin(x.time) - toMin(y.time))
+  const plans: { item: Item & { time: string }; minutes: number }[] = []
+  for (const t of targets) {
+    const start = toMin(t.time)
+    const length = t.end ? toMin(t.end) - start : 0
+    const ready = Math.max(start, ...people(t).map((p) => free.get(p) ?? start))
+    if (ready > start) plans.push({ item: t, minutes: ready - start })
+    for (const p of people(t)) free.set(p, Math.max(free.get(p) ?? 0, ready + length))
   }
-  return { moved: plans.length, until: stop, errors }
+  const errors = plans.flatMap(({ item: t, minutes }) => moveItems([t], minutes, anchors, true))
+  if (errors.length) return { moved: [], errors }
+  const moved = plans.map(({ item: t, minutes }) => ({ title: t.title, from: t.time, to: toHhmm(toMin(t.time) + minutes), private: t.private }))
+  for (const { item: t, minutes } of plans) moveItems([t], minutes, anchors)
+  return { moved, errors }
 }
 
 /**

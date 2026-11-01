@@ -222,3 +222,19 @@ describe('備案', () => {
     expect(r.errors.join()).toContain('不在地點清單裡')
   })
 })
+
+describe('insert_item', () => {
+  it('插入並把被蓋到的往後推，修改紀錄列出每一項怎麼動', () => {
+    const r = applyOps(seoul2026, [{ op: 'insert_item', date: day2, item: { time: '15:30', end: '16:00', kind: 'shopping', title: '逛書店', who: ['me'] } }])
+    expect(r.errors).toEqual([])
+    expect(r.changes.map((c) => c.text)).toEqual([
+      '11/7 15:30「逛書店」',
+      '為了騰出時間，後面 1 項往後挪：「自由時間：京義線林蔭道・望遠市場」15:30 → 16:00',
+    ])
+  })
+
+  it('推不動（會撞到固定行程）就整個不插入，並說明要怎麼改', () => {
+    const r = applyOps(seoul2026, [{ op: 'insert_item', date: day2, item: { time: '15:00', end: '15:30', kind: 'shopping', title: '逛 SPAO' } }])
+    expect(r.errors[0]).toMatch(/^插入「逛 SPAO」要把後面的行程往後推，但.*取票.*請縮短或拿掉某個彈性項目，或改時間$/)
+  })
+})

@@ -272,6 +272,8 @@ const spotChangesSchema = z
 
 export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_item'), date: isoDate, item: itemSchema }),
+  /** 插入到已經有安排的時段：自動把後面被蓋到的彈性項目往後推（要有開始與結束時間） */
+  z.object({ op: z.literal('insert_item'), date: isoDate, item: itemSchema.extend({ time: hhmm, end: hhmm }) }),
   z.object({
     op: z.literal('update_item'),
     date: isoDate,
