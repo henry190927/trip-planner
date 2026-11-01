@@ -74,3 +74,27 @@ test('還沒輸入通關密語時，改用備案會提示先輸入', async ({ pa
   await card.getByRole('button', { name: /確定換成/ }).click()
   await expect(card.getByText('要先在小樹那邊輸入通關密語')).toBeVisible()
 })
+
+test('備案可以刪除（要再確認）；「原本的安排」不能刪', async ({ page }) => {
+  const sent = await mockApi(page)
+  await page.goto(`./${trip}`)
+  await page.getByRole('button', { name: /DAY 2/ }).click()
+  await expect(page.getByRole('radiogroup', { name: '看誰的行程' })).toHaveCount(1)
+
+  const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'MISS 豬腳宵夜' }) })
+  await card.getByRole('button', { name: /備案 2/ }).click()
+  await card.getByRole('button', { name: '刪除備案「便利商店買宵夜回住宿」' }).click()
+  expect(sent).toHaveLength(0)
+  await card.getByRole('button', { name: '刪除', exact: true }).click()
+  await expect(card.getByText('便利商店買宵夜回住宿')).toHaveCount(0)
+  expect(sent[0]).toMatchObject({ source: 'manual', ops: [{ op: 'remove_alternative', index: 1 }] })
+  await expect(card.getByRole('button', { name: /備案 1/ })).toBeVisible()
+
+  // 換成剩下的備案後，「其他安排」裡的原本的安排沒有刪除按鈕
+  await card.getByRole('button', { name: '改用這個' }).click()
+  await card.getByRole('button', { name: /確定換成/ }).click()
+  const now = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: '外帶 MISS 豬腳回住宿吃' }) })
+  await now.getByRole('button', { name: /其他安排/ }).click()
+  await expect(now.getByRole('button', { name: '換回原本的' })).toBeVisible()
+  await expect(now.getByRole('button', { name: /^刪除備案/ })).toHaveCount(0)
+})
