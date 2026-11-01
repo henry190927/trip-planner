@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import type { opSchema } from '../schema'
 import type { Alternative, Day, Item, Spot, Trip } from '../types'
 import { triggerLabels } from './triggers'
-import { shiftItems } from './plan'
+import { makeRoom, shiftItems } from './plan'
 import { formatDate } from './dates'
 import { validateTrip } from './validate'
 
@@ -176,6 +176,30 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         linkSpot(trip, op.item)
         day.items.push(op.item)
         changes.push({ kind: 'add', text: label(op.date, op.item), date: op.date })
+        break
+      }
+      case 'insert_item': {
+        const day = dayOf(op.date)
+        if (!day) {
+          errors.push(`旅程裡沒有 ${op.date} 這一天`)
+          break
+        }
+        const room = makeRoom(day, op.item, trip.travelers.map((t) => t.id))
+        if (room.errors.length) {
+          errors.push(...room.errors.map((e) => `插入「${op.item.title}」要把後面的行程往後推，但${e}；請縮短或拿掉某個彈性項目，或改時間`))
+          break
+        }
+        linkSpot(trip, op.item)
+        day.items.push(op.item)
+        changes.push({ kind: 'add', text: label(op.date, op.item), date: op.date })
+        if (room.moved.length)
+          changes.push({
+            kind: 'update',
+            text: `為了騰出時間，後面 ${room.moved.length} 項往後挪：${room.moved
+              .map((m) => (m.private ? `私人小任務 ${m.from} → ${m.to}` : `「${m.title}」${m.from} → ${m.to}`))
+              .join('、')}`,
+            date: op.date,
+          })
         break
       }
       case 'update_item': {

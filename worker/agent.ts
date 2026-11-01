@@ -159,6 +159,7 @@ const tools = [
                     type: 'string',
                     enum: [
                       'add_item',
+                      'insert_item',
                       'update_item',
                       'remove_item',
                       'add_checklist_item',
@@ -184,7 +185,12 @@ const tools = [
                   minutes: { type: 'integer', description: 'shift_items：挪幾分鐘，正數往後延、負數提前' },
                   who: str('shift_items：只挪某位旅伴自己的項目時填旅伴 id'),
                   done: { type: 'boolean', description: 'complete_task：true 完成、false 改回還沒完成' },
-                  item: { type: 'object', properties: itemProps, required: ['kind', 'title'], description: 'add_item 的新項目' },
+                  item: {
+                    type: 'object',
+                    properties: itemProps,
+                    required: ['kind', 'title'],
+                    description: 'add_item / insert_item 的新項目（insert_item 一定要有 time 與 end）',
+                  },
                   changes: {
                     type: 'object',
                     description: 'update_item 要改的欄位；要刪掉某個欄位就給 null',
@@ -235,6 +241,8 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 時間用 HH:MM、旅程當地時間；日期用 YYYY-MM-DD，必須在旅程期間內。
 - 只屬於某位旅伴的項目才填 who；routeId 只能用既有的路線 id。
 - 排行程時考慮移動時間與兩人分頭行動的時段，不要排到時間衝突：同一個人同一時間只能有一件事（系統會擋下重疊的修改）。兩個人分頭行動的時段，新加的項目要用 who 指定給有空的那個人。
+- 把新項目加進已經有安排的時段時，用 insert_item（要有 time 與 end）：系統會自動把後面被蓋到的彈性項目往後推，中間有空檔就吸收，推到會撞固定行程時會回報。不要用 add_item 直接塞進去。推不動時，跟使用者商量要縮短、拿掉哪一項，或調整固定行程（例如取票時間還有餘裕）。
+- 插入或挪動之後，回答時用一兩句話說明這一天的順序怎麼變了，讓使用者套用前就知道。
 - 「地點清單」（spots）收已排進行程的地點與還沒排的口袋名單。使用者丟店家連結、或說「想去但還沒決定」時，用 add_spot 加進清單，不要直接排進行程。
 - 加地點時一定要填 area（所在地區），而且沿用清單裡已經有的地區叫法（例如「弘大」），不要另外取新名字；真的在別區才用新的地區名。
 - 把清單裡的地點排進行程時，行程項目的 spotId 填那個地點的 id；同一個地點的營業時間、交通等資訊寫在地點上，不要重複寫在行程項目裡。
@@ -437,7 +445,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
             response = {
               ok: false,
               errors: clashes.map((c) => `時間重疊（同一個人同時有兩件事）：${c}`),
-              hint: '請改時間、用 who 只排給有空的人，或一起調整其他彈性項目；固定行程不能動',
+              hint: '請改用 insert_item 自動把後面的行程往後推，或改時間、用 who 只排給有空的人；固定行程不能動',
             }
           } else {
             emit({
