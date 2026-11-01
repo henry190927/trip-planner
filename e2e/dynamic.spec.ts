@@ -24,7 +24,7 @@ test('旅行中：聊天框有快捷按鈕，按了會填好現在時間與下�
   await dialog.getByRole('button', { name: '早到了' }).click()
   const box = dialog.getByRole('textbox', { name: '訊息' })
   await expect(box).toHaveValue(/現在是 11\/7 13:10/)
-  await expect(box).toHaveValue(/16:15「取票・周邊領取」/)
+  await expect(box).toHaveValue(/16:15「取票・周邊（想再逛可以去）」/)
   // 填進來的長文字要看得到，輸入框跟著長高
   const height = await box.evaluate((el) => el.clientHeight)
   expect(height).toBeGreaterThan(60)
