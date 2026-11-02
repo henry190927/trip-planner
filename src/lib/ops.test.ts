@@ -296,6 +296,28 @@ describe('update_checklist_item', () => {
   })
 })
 
+describe('check_checklist_item', () => {
+  it('勾掉、再取消勾選；狀態存在行程裡', () => {
+    const on = applyOps(seoul2026, [{ op: 'check_checklist_item', ref: 'kakaot', done: true }])
+    expect(on.errors).toEqual([])
+    expect(on.trip.checklist.flatMap((g) => g.items).find((i) => i.id === 'kakaot')!.done).toBe(true)
+    expect(on.changes[0].text).toBe('清單「App 與網路」：勾掉「Kakao T 註冊、綁卡」')
+    const off = applyOps(on.trip, [{ op: 'check_checklist_item', ref: 'Kakao T 註冊、綁卡', done: false }])
+    expect(off.trip.checklist.flatMap((g) => g.items).find((i) => i.id === 'kakaot')!.done).toBeUndefined()
+    expect(off.changes[0].text).toBe('清單「App 與網路」：取消勾選「Kakao T 註冊、綁卡」')
+  })
+
+  it('已經是那個狀態就不記一筆變動', () => {
+    const r = applyOps(seoul2026, [{ op: 'check_checklist_item', ref: 'kakaot', done: false }])
+    expect(r.errors).toEqual([])
+    expect(r.changes).toEqual([])
+  })
+
+  it('找不到項目時退回', () => {
+    expect(applyOps(seoul2026, [{ op: 'check_checklist_item', ref: '不存在', done: true }]).errors).toHaveLength(1)
+  })
+})
+
 describe('update_spot 只補地圖連結', () => {
   it('place 只給 mapLink，名稱、韓文名、搜尋字都保留', () => {
     const r = applyOps(seoul2026, [{ op: 'update_spot', ref: 'miss-jokbal', spotChanges: { place: { mapLink: 'https://naver.me/miss' } } }])

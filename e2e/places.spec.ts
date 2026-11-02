@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { seoul2026 } from '../src/trips/seoul-2026-11'
 
 // 地點分頁：用網站內建的行程（後端連不上時的狀態）
 const trip = '#/trip/seoul-2026-11'
@@ -57,7 +58,6 @@ test.describe('編輯、刪除、新增地點', () => {
     await page.unrouteAll()
     const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
     const { applyOps } = await import('../src/lib/ops')
-    const { seoul2026 } = await import('../src/trips/seoul-2026-11')
     let current = seoul2026
     let version = 7
     await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
@@ -138,6 +138,17 @@ test('手機上點地圖先試著開 App，沒裝 App 就改開網頁版', async
   await page.locator('#spot-miss-jokbal').getByRole('link', { name: /Naver Map/ }).click()
   // 沒有 App：等一下之後改開網頁版的搜尋
   await expect(page).toHaveURL(/map\.naver\.com\/p\/search\//, { timeout: 5000 })
+})
+
+test('手機上有確切連結時在同一個分頁打開，不多開分頁', async ({ page, context }) => {
+  const linked = structuredClone(seoul2026)
+  linked.spots!.find((s) => s.id === 'miss-jokbal')!.place.mapLink = 'https://naver.me/xTest123'
+  await page.route('**/api/trips', (r) => r.fulfill({ json: { trips: [{ version: 1, trip: linked, log: [] }] } }))
+  await page.route('https://naver.me/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>naver place</title>' }))
+  await page.goto(`./${trip}/places`)
+  await page.locator('#spot-miss-jokbal').getByRole('link', { name: '開 Naver Map' }).click()
+  await expect(page).toHaveURL('https://naver.me/xTest123')
+  expect(context.pages()).toHaveLength(1)
 })
 
 test('已排進行程、口袋名單可以各自收合，重新整理後維持', async ({ page }) => {

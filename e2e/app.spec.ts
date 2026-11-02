@@ -43,13 +43,12 @@ test('給司機看：全螢幕顯示韓文地址', async ({ page }) => {
   await page.screenshot({ path: 'e2e/screenshots/info.png', fullPage: true })
 })
 
-test('清單勾選重新整理後還在', async ({ page }) => {
+test('清單：顯示行程裡已勾掉的項目', async ({ page }) => {
+  const checked = structuredClone(seoul2026)
+  checked.checklist[0].items[0].done = true
+  await page.route('**/api/trips', (r) => r.fulfill({ json: { trips: [{ version: 1, trip: checked, log: [] }] } }))
   await page.goto(`./${trip}/list`)
-  const box = page.getByRole('checkbox', { name: /護照/ })
-  await box.click()
-  await expect(box).toHaveAttribute('aria-checked', 'true')
-  await page.reload()
-  await expect(page.getByRole('checkbox', { name: /護照/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('checkbox', { name: checked.checklist[0].items[0].label })).toHaveAttribute('aria-checked', 'true')
   await page.screenshot({ path: 'e2e/screenshots/list.png', fullPage: true })
 })
 
