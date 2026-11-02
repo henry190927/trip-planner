@@ -48,12 +48,20 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   )
 }
 
-/** 手機上先試著直接開地圖 App；沒裝 App（畫面沒有切走）就改開網頁版 */
+/**
+ * 手機上不開新分頁：地圖的網頁會再把人轉進 App，新分頁就留在 Safari 裡，越按越多。
+ * 有確切連結就在原本的分頁打開（裝了 App 會直接跳過去，回來按上一頁）；
+ * 只能搜尋的先試 App 專屬連結，沒裝 App（畫面沒有切走）才改開網頁版。電腦上照常開新分頁。
+ */
 function openMapApp(e: MouseEvent<HTMLAnchorElement>, provider: MapProvider, place: Place) {
-  const app = mapAppUrl(provider, place)
-  if (!app || !isPhone(navigator.userAgent)) return
+  if (!isPhone(navigator.userAgent)) return
   e.preventDefault()
   const web = mapUrl(provider, place)
+  const app = mapAppUrl(provider, place)
+  if (!app) {
+    window.location.href = web
+    return
+  }
   const fallback = setTimeout(() => {
     if (document.visibilityState === 'visible') window.location.href = web
   }, 1500)

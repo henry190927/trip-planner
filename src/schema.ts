@@ -159,7 +159,8 @@ export const tipSectionSchema = z.object({ title: z.string(), tips: z.array(tipS
 
 export const checklistGroupSchema = z.object({
   title: z.string(),
-  items: z.array(z.object({ id: z.string(), label: z.string() })),
+  /** done：已經勾掉；兩個人看到的是同一份 */
+  items: z.array(z.object({ id: z.string(), label: z.string(), done: z.boolean().optional() })),
 })
 
 export const spotCategories = ['food', 'cafe', 'shopping', 'sight', 'other'] as const
@@ -289,6 +290,8 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('remove_checklist_item'), ref: z.string(), group: z.string().optional() }),
   /** 改清單項目的文字；ref 同上 */
   z.object({ op: z.literal('update_checklist_item'), ref: z.string(), group: z.string().optional(), label: z.string().min(1) }),
+  /** 勾掉（done: true）或取消勾選清單項目；ref 同上 */
+  z.object({ op: z.literal('check_checklist_item'), ref: z.string(), group: z.string().optional(), done: z.boolean() }),
   z.object({ op: z.literal('add_pending'), text: z.string() }),
   z.object({ op: z.literal('remove_pending'), text: z.string() }),
   /** 加進地點清單；id 省略時自動產生 */

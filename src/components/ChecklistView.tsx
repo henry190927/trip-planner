@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { Check, LoaderCircle, Pencil, Trash2 } from 'lucide-react'
 import type { Trip } from '../types'
@@ -10,13 +10,55 @@ import { GrowingTree } from './illustrations'
 const encouragement = ['種下一顆種子吧', '發芽了！', '長出葉子了', '快變成一棵樹了', '準備完成，出發！']
 
 export default function ChecklistView({ trip }: { trip: Trip }) {
-  const checked = usePrefs((s) => s.checked[trip.id])
-  const toggle = usePrefs((s) => s.toggleChecked)
-  const done = new Set(checked)
-  const total = trip.checklist.reduce((n, g) => n + g.items.length, 0)
-  const count = trip.checklist.reduce((n, g) => n + g.items.filter((i) => done.has(i.id)).length, 0)
-  const progress = total ? count / total : 0
   const applyDirect = useChat((s) => s.applyDirect)
+  const passcode = useChat((s) => s.passcode)
+  const legacy = usePrefs((s) => s.checked[trip.id])
+  const clearLegacy = usePrefs((s) => s.clearChecked)
+  // 已經按了、還在等伺服器的勾選（先顯示，失敗再退回）
+  const [pending, setPending] = useState<Record<string, boolean>>({})
+  const [toggleError, setToggleError] = useState('')
+  // 勾選一個一個送，連點時才不會後送的先到、把狀態蓋回去
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  const isDone = (item: { id: string; done?: boolean }) => pending[item.id] ?? !!item.done
+  const total = trip.checklist.reduce((n, g) => n + g.items.length, 0)
+  const count = trip.checklist.reduce((n, g) => n + g.items.filter(isDone).length, 0)
+  const progress = total ? count / total : 0
+
+  const toggle = (group: string, item: { id: string; label: string; done?: boolean }) => {
+    if (!passcode) return setToggleError('勾選會同步給兩個人，要先在小樹那邊輸入通關密語')
+    const next = !isDone(item)
+    setToggleError('')
+    setPending((p) => ({ ...p, [item.id]: next }))
+    const settle = () =>
+      setPending((p) => {
+        if (p[item.id] !== next) return p
+        const { [item.id]: _, ...rest } = p
+        return rest
+      })
+    queue.current = queue.current
+      .then(() => applyDirect(trip.id, [{ op: 'check_checklist_item', ref: item.id, group, done: next }], `${next ? '勾掉' : '取消勾選'}：${item.label}`))
+      .then(settle, (e: unknown) => {
+        settle()
+        setToggleError(e instanceof Error ? e.message : String(e))
+      })
+  }
+
+  // 以前勾選只存在這支手機上：第一次打開時把那些勾選搬進行程，之後兩個人看到同一份
+  const migrating = useRef(false)
+  useEffect(() => {
+    if (!passcode || !legacy?.length || migrating.current) return
+    const ids = legacy.filter((id) => trip.checklist.some((g) => g.items.some((i) => i.id === id && !i.done)))
+    if (!ids.length) return clearLegacy(trip.id)
+    migrating.current = true
+    applyDirect(
+      trip.id,
+      ids.map((id) => ({ op: 'check_checklist_item', ref: id, done: true })),
+      '同步這支手機原本的清單勾選',
+    )
+      .then(() => clearLegacy(trip.id))
+      .catch(() => undefined)
+      .finally(() => (migrating.current = false))
+  }, [passcode, legacy, trip.checklist, trip.id, applyDirect, clearLegacy])
   // 正在編輯或確認刪除的項目（同一時間只有一項）
   const [action, setAction] = useState<{ id: string; mode: 'edit' | 'delete'; text?: string; busy?: boolean; error?: string }>()
   const run = async (group: string, id: string, label: string) => {
@@ -55,16 +97,17 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
               transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
             />
           </div>
-          <p className="mt-2 text-[11px] text-mute">勾選紀錄只存在這支手機上；編輯、刪除項目兩個人都會看到。</p>
+          <p className="mt-2 text-[11px] text-mute">勾選、編輯、刪除，兩個人看到的都是同一份。</p>
         </div>
       </Card>
+      {toggleError && <p className="mt-3 rounded-2xl bg-peach/40 px-3 py-2 text-sm font-bold text-peach-ink">{toggleError}</p>}
 
       {trip.checklist.map((group) => (
         <div key={group.title}>
           <SectionTitle>{group.title}</SectionTitle>
           <Card className="divide-y-2 divide-cream p-0">
             {group.items.map((item) => {
-              const on = done.has(item.id)
+              const on = isDone(item)
               const current = action?.id === item.id ? action : undefined
               const editing = current?.mode === 'edit'
               return (
@@ -103,7 +146,7 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
                         type="button"
                         role="checkbox"
                         aria-checked={on}
-                        onClick={() => toggle(trip.id, item.id)}
+                        onClick={() => toggle(group.title, item)}
                         className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5 text-left active:bg-cream/60"
                       >
                         <motion.span

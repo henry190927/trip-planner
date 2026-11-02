@@ -168,6 +168,7 @@ const tools = [
                       'add_checklist_item',
                       'remove_checklist_item',
                       'update_checklist_item',
+                      'check_checklist_item',
                       'add_pending',
                       'remove_pending',
                       'add_spot',
@@ -189,7 +190,7 @@ const tools = [
                   until: str('shift_items：挪到幾點為止（不含）；省略 = 下一個固定行程之前'),
                   minutes: { type: 'integer', description: 'shift_items：挪幾分鐘，正數往後延、負數提前' },
                   who: str('shift_items：只挪某位旅伴自己的項目時填旅伴 id'),
-                  done: { type: 'boolean', description: 'complete_task：true 完成、false 改回還沒完成' },
+                  done: { type: 'boolean', description: 'complete_task / check_checklist_item：true 完成（勾掉）、false 改回還沒完成' },
                   item: {
                     type: 'object',
                     properties: itemProps,
@@ -205,7 +206,7 @@ const tools = [
                   label: str('add_checklist_item / update_checklist_item：清單項目文字（update 時是新的文字）'),
                   text: str('add_pending / remove_pending 的文字'),
                   spot: { type: 'object', properties: spotProps, required: ['place', 'category'], description: 'add_spot 的新地點（id 可省略）' },
-                  ref: str('update_spot / remove_spot：地點的 id、名稱或當地語言名稱；remove_checklist_item：清單項目的 id 或文字'),
+                  ref: str('update_spot / remove_spot：地點的 id、名稱或當地語言名稱；remove_checklist_item / update_checklist_item / check_checklist_item：清單項目的 id 或文字'),
                   spotChanges: {
                     type: 'object',
                     description: 'update_spot 要改的欄位；要刪掉某個欄位就給 null',
@@ -244,7 +245,7 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 要改行程時呼叫 propose_changes。修改不會立刻生效，要等使用者按「套用」，所以不要說「已經改好」。呼叫 propose_changes 之前不要提到「套用」按鈕；等工具回傳 ok: true 之後，才請使用者按「套用」。
 - 使用者貼了地圖 App 的分享連結（例如 naver.me/…）時，把它原樣填進對應地點的 place.mapLink（update_spot 時 spotChanges.place 只要給 mapLink 就好，其他欄位會沿用）。
 - 地圖連結（mapLink）只能用搜尋結果裡真的出現過、或使用者貼的網址，不要自己組 Naver 連結；沒有就只填 local 與 mapQuery（用當地語言的完整店名，分店名也寫上，地圖 App 才搜得到正確的那間）。回答的文字裡也不要附自己組的地圖網址；要給地圖，就請使用者在地點清單或行程卡片按「地圖」（會用店名直接在地圖 App 裡搜尋）。
-- 清單（checklist）可以用 add_checklist_item 新增、update_checklist_item 改文字、remove_checklist_item 刪除（ref 填目前的項目文字）。
+- 清單（checklist）可以用 add_checklist_item 新增、update_checklist_item 改文字、remove_checklist_item 刪除、check_checklist_item 勾掉或取消勾選（done），ref 填目前的項目文字。項目的 done: true 代表已經準備好了，兩個人看到的是同一份。
 - 修改被系統退回時，照錯誤訊息直接修正再送，回答裡不要提到退回、重試或道歉，只講最後的結果。
 - 這一輪沒有呼叫 propose_changes，就不要說你改了、更新了或記下了任何東西；想改的話先問使用者要不要，或直接呼叫 propose_changes。
 - 新增的地點盡量填 place.local 與 place.mapQuery（用當地語言，地圖才搜得到）。
