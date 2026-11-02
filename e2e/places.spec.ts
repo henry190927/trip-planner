@@ -140,14 +140,17 @@ test('手機上點地圖先試著開 App，沒裝 App 就改開網頁版', async
   await expect(page).toHaveURL(/map\.naver\.com\/p\/search\//, { timeout: 5000 })
 })
 
-test('手機上有確切連結時在同一個分頁打開，不多開分頁', async ({ page, context }) => {
+test('手機上有確切連結時也先叫 App；沒裝 App 才在同一個分頁開那個連結，不多開分頁', async ({ page, context }) => {
   const linked = structuredClone(seoul2026)
   linked.spots!.find((s) => s.id === 'miss-jokbal')!.place.mapLink = 'https://naver.me/xTest123'
   await page.route('**/api/trips', (r) => r.fulfill({ json: { trips: [{ version: 1, trip: linked, log: [] }] } }))
   await page.route('https://naver.me/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>naver place</title>' }))
   await page.goto(`./${trip}/places`)
   await page.locator('#spot-miss-jokbal').getByRole('link', { name: '開 Naver Map' }).click()
-  await expect(page).toHaveURL('https://naver.me/xTest123')
+  // 先停在原頁（在等 App）
+  await page.waitForTimeout(500)
+  await expect(page).toHaveURL(/#\/trip\/seoul-2026-11\/places/)
+  await expect(page).toHaveURL('https://naver.me/xTest123', { timeout: 5000 })
   expect(context.pages()).toHaveLength(1)
 })
 
