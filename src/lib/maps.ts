@@ -12,7 +12,9 @@ export const mapLabel: Record<MapProvider, string> = {
   google: 'Google Maps',
 }
 
-const queryOf = (place: Place) => place.mapQuery ?? place.local ?? place.name
+// 搜尋字串被填成網址時不能拿來搜，改用店名
+const isUrl = (text?: string) => !!text && /^https?:\/\//i.test(text.trim())
+const queryOf = (place: Place) => (isUrl(place.mapQuery) ? undefined : place.mapQuery) ?? place.local ?? place.name
 
 /** 網頁版連結（電腦、或手機沒裝 App 時用） */
 export function mapUrl(provider: MapProvider, place: Place) {
@@ -33,9 +35,12 @@ export const isExact = (place: Place) => !!place.mapLink
 /** 搜尋時用的字（顯示給使用者看「會用什麼搜尋」） */
 export const searchText = queryOf
 
+/**
+ * 手機上直接叫起地圖 App 的連結。Naver 的 App 連結沒有「用分享連結或地點 ID 打開某一間」的格式，
+ * 只能用店名搜尋，所以有確切連結的也先用完整店名（含分店名）在 App 裡搜；
+ * 確切連結留給沒裝 App 時開網頁、以及電腦上用
+ */
 export function mapAppUrl(provider: MapProvider, place: Place) {
-  // 有確切的地點連結就直接開它（不要改成搜尋，搜尋可能跳到別間分店）
-  if (isExact(place)) return undefined
   return appBuilders[provider]?.(queryOf(place))
 }
 

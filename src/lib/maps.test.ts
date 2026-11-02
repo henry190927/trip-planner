@@ -10,8 +10,16 @@ describe('地圖連結', () => {
     expect(mapAppUrl('google', place)).toBeUndefined()
   })
 
-  it('有確切的地點連結就直接開它，不改成搜尋', () => {
-    expect(mapAppUrl('naver', { ...place, mapLink: 'https://naver.me/abc' })).toBeUndefined()
+  it('有確切連結時，手機上還是先用店名叫起 App（Naver 的 App 連結不能直接開分享連結）', () => {
+    expect(mapAppUrl('naver', { ...place, mapLink: 'https://naver.me/abc' })).toBe(
+      `nmap://search?query=${encodeURIComponent('미쓰족발 홍대')}&appname=io.github.henry190927.trip-planner`,
+    )
+  })
+
+  it('搜尋字串被填成網址時改用當地名稱搜', () => {
+    const odd = { name: '鳳山精肉 弘大總店', local: '봉산정육 홍대본점', mapQuery: 'https://map.naver.com/p/entry/place/2032494208' }
+    expect(mapAppUrl('naver', odd)).toContain(encodeURIComponent('봉산정육 홍대본점'))
+    expect(mapUrl('naver', odd)).toBe(`https://map.naver.com/p/search/${encodeURIComponent('봉산정육 홍대본점')}`)
   })
 
   it('網頁版：有指定連結就用指定的', () => {
