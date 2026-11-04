@@ -6,12 +6,12 @@ import { triggerLabels } from '../lib/triggers'
 import { triggerIcons } from './Alternatives'
 import { formatDate, weekday, type TripPhase, type ZonedNow } from '../lib/time'
 import { usePrefs } from '../lib/store'
+import { swipeDirection } from '../lib/swipe'
 import { canSee } from '../lib/visibility'
 import TimelineItem from './TimelineItem'
 import { SceneArt } from './illustrations'
 import { gradient } from './ui'
 
-const swipe = { distance: 60, velocity: 400 }
 
 
 function WhoFilter({ trip }: { trip: Trip }) {
@@ -87,8 +87,8 @@ export default function DayView({ trip, now, phase, focus }: { trip: Trip; now: 
   }
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x < -swipe.distance || info.velocity.x < -swipe.velocity) go(index + 1)
-    else if (info.offset.x > swipe.distance || info.velocity.x > swipe.velocity) go(index - 1)
+    const dir = swipeDirection(info.offset, info.velocity)
+    if (dir) go(index + dir)
   }
 
   // 「現在」與「下一個」：只在當天、且時間是旅程當地時區的項目上判斷

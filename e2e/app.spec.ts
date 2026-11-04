@@ -62,6 +62,19 @@ test('左右滑動切換天數', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '逛街・第二場' })).toBeVisible()
 })
 
+test('往上捲時手指往旁邊偏，不會切到下一天', async ({ page }) => {
+  await page.goto(`./${trip}`)
+  const box = (await page.getByRole('heading', { name: '落地直奔場館' }).boundingBox())!
+  await page.mouse.move(box.x + 200, box.y + 300)
+  await page.mouse.down()
+  // 斜斜往上撥：往左 60、往上 150，很快
+  await page.mouse.move(box.x + 140, box.y + 150, { steps: 3 })
+  await page.mouse.up()
+  await page.waitForTimeout(500)
+  await expect(page.getByRole('heading', { name: '落地直奔場館' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '逛街・第二場' })).toHaveCount(0)
+})
+
 // 回歸測試：離開「交通 / 資訊 / 清單」分頁時曾經整頁空白（effect 回傳了 scrollTo 的 Promise）。
 // 當機發生在舊分頁退場動畫結束、真正卸載的時候，所以每次切換都要等動畫跑完再檢查。
 test('用底部導覽列切遍所有分頁，畫面都不會消失', async ({ page }) => {
