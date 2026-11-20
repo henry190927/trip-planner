@@ -1,9 +1,9 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { applyOps } from '../src/lib/ops'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 // 聊天框的端對端測試：後端全部用 page.route 模擬，不會真的呼叫 Gemini
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 const trip = '#/trip/seoul-2026-11'
 const ops = [{ op: 'add_item' as const, date: '2026-11-07', item: { time: '11:00', kind: 'food' as const, title: '延南洞咖啡廳 TEST', tentative: true } }]
 
@@ -13,9 +13,6 @@ async function mockApi(page: Page) {
   // 一開始就有一筆舊紀錄：第一次打開時它會被當成看過，之後才測得出「自己套用不通知自己」
   let log = [{ version: 0, at: '2026-10-20T01:00:00Z', source: 'sync', summary: '從程式碼同步', changes: [] }]
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log }] } }))
-  await page.route(`${API}/api/auth`, (r) =>
-    r.request().headers().authorization === 'Bearer letmein' ? r.fulfill({ json: { ok: true } }) : r.fulfill({ status: 401, json: { error: '通關密語不對' } }),
-  )
   await page.route(`${API}/api/chat`, (r) => {
     const changes = applyOps(current, ops).changes
     const events = [
@@ -45,18 +42,12 @@ async function mockApi(page: Page) {
   return { undos: () => undos }
 }
 
-test('通關密語 → 聊天 → 套用修改 → 行程上看得到', async ({ page }) => {
+test('聊天 → 套用修改 → 行程上看得到', async ({ page }) => {
   await mockApi(page)
   await page.goto(`./${trip}`)
   await page.getByRole('button', { name: '打開旅行小幫手' }).click()
 
   const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
-  await dialog.getByPlaceholder('通關密語').fill('wrong')
-  await dialog.getByRole('button', { name: '開始聊天' }).click()
-  await expect(dialog.getByText('通關密語不對')).toBeVisible()
-  await dialog.getByPlaceholder('通關密語').fill('letmein')
-  await dialog.getByRole('button', { name: '開始聊天' }).click()
-
   await expect(dialog.getByText('嗨！我是小樹')).toBeVisible()
   await dialog.getByRole('textbox', { name: '訊息' }).fill('11/7 早上加一間咖啡廳')
   await dialog.getByRole('button', { name: '送出' }).click()
@@ -84,10 +75,23 @@ test('通關密語 → 聊天 → 套用修改 → 行程上看得到', async ({
   await expect(dialog.getByText('已套用到行程')).toBeVisible()
 })
 
-test('後端連不上時，用網站內建的行程照常顯示', async ({ page }) => {
-  await page.route(`${API}/**`, (r) => r.abort())
+test('後端連不上時，用這支手機上次存的行程照常顯示（離線）', async ({ page }) => {
+  // 先正常打開一次，行程存到手機上
   await page.goto(`./${trip}`)
   await expect(page.getByRole('heading', { name: '落地直奔場館' })).toBeVisible()
+  // 斷網後重新打開
+  await page.route('**/api/**', (r) => r.abort())
+  await page.reload()
+  await expect(page.getByRole('heading', { name: '落地直奔場館' })).toBeVisible()
+  await page.goto('./#/')
+  await expect(page.getByText('離線中')).toBeVisible()
+})
+
+test('沒登入、也沒有存過行程：只看到登入畫面', async ({ page }) => {
+  await page.route('**/api/**', (r) => r.abort())
+  await page.goto(`./${trip}`)
+  await expect(page.getByRole('button', { name: '用 Face ID／指紋登入' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '落地直奔場館' })).toHaveCount(0)
 })
 
 test('複製回覆與整段對話：排版符號換成一般文字，附上來源', async ({ page, context }) => {
@@ -96,8 +100,6 @@ test('複製回覆與整段對話：排版符號換成一般文字，附上來�
   await page.goto(`./${trip}`)
   await page.getByRole('button', { name: '打開旅行小幫手' }).click()
   const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
-  await dialog.getByPlaceholder('通關密語').fill('letmein')
-  await dialog.getByRole('button', { name: '開始聊天' }).click()
   await dialog.getByRole('textbox', { name: '訊息' }).fill('推薦咖啡廳')
   await dialog.getByRole('button', { name: '送出' }).click()
   await expect(dialog.getByRole('button', { name: '套用' })).toBeVisible()
@@ -118,7 +120,6 @@ test('複製回覆與整段對話：排版符號換成一般文字，附上來�
 
 test('附圖：在手機上縮成 JPEG 才上傳，下一則訊息不重傳', async ({ page }) => {
   const bodies: { messages: { text: string; images?: { mimeType: string; data: string }[] }[] }[] = []
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
   await page.route(`${API}/api/chat`, (r) => {
     bodies.push(r.request().postDataJSON())
@@ -169,7 +170,6 @@ test('附圖：在手機上縮成 JPEG 才上傳，下一則訊息不重傳', as
 
 test('復原要再確認一次，寫出復原的是哪一次修改', async ({ page }) => {
   const api = await mockApi(page)
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'letmein', threads: {} }, version: 1 })))
   await page.goto(`./${trip}`)
   await page.getByRole('button', { name: '打開旅行小幫手' }).click()
   const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
@@ -192,7 +192,6 @@ test('復原要再確認一次，寫出復原的是哪一次修改', async ({ pa
 })
 
 test('串流沒收到結束訊號就斷了：明講連線中斷', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))
   await page.route(`${API}/api/chat`, (r) =>
     r.fulfill({ contentType: 'text/event-stream', body: `: ping\n\ndata: ${JSON.stringify({ type: 'text', delta: '我查到了，弘大有' })}\n\n` }),
@@ -216,7 +215,7 @@ test.describe('聊天框的捲動', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(
-      (threads) => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: { 'seoul-2026-11': threads } }, version: 1 })),
+      (threads) => localStorage.setItem('trip-chat', JSON.stringify({ state: { threads: { 'seoul-2026-11': threads } }, version: 2 })),
       history,
     )
     await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 0, trip: seoul2026, log: [] }] } }))

@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Check, ChevronRight } from 'lucide-react'
-import { upcoming } from '../trips'
-import { useTripList } from '../lib/tripStore'
+import { Check, ChevronRight, CircleUserRound, CloudOff } from 'lucide-react'
+import { useAuth } from '../lib/authStore'
+import { useTripList, useTrips } from '../lib/tripStore'
 import { href } from '../lib/router'
 import { formatDate, nowIn, tripPhase } from '../lib/time'
 import type { Trip } from '../types'
 import { Plane, TripIcon, TwoFriends } from './illustrations'
 import { gradient } from './ui'
+import AccountSheet from './AccountSheet'
 
 function phaseText(trip: Trip) {
   const phase = tripPhase(trip, nowIn(trip.timezone).date)
@@ -17,9 +19,29 @@ function phaseText(trip: Trip) {
 
 export default function TripList() {
   const trips = useTripList()
+  const status = useAuth((s) => s.status)
+  const loading = useTrips((s) => s.status === 'loading' || s.status === 'idle')
+  const [account, setAccount] = useState(false)
   return (
     <div className="pt-safe mx-auto min-h-dvh max-w-lg px-4 pb-16">
-      <header className="relative flex items-end justify-between pb-4 pt-8">
+      <div className="flex justify-end pt-3">
+        {status === 'offline' ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1.5 text-xs font-bold text-mute">
+            <CloudOff className="size-4" />
+            離線中
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAccount(true)}
+            aria-label="帳號"
+            className="flex size-10 items-center justify-center rounded-full active:bg-cream"
+          >
+            <CircleUserRound className="size-6" />
+          </button>
+        )}
+      </div>
+      <header className="relative flex items-end justify-between pb-4 pt-2">
         <div>
           <p className="text-xs font-extrabold tracking-[0.25em] text-peach-ink">TRAVEL NOTES</p>
           <h1 className="mt-1 text-3xl font-black">旅行手帖</h1>
@@ -61,17 +83,14 @@ export default function TripList() {
           )
         })}
 
-        {upcoming.map((u) => (
-          <div key={u.title} className="rounded-[2rem] border-2 border-dashed border-butter bg-cream/60 p-6">
-            <p className="text-sm font-bold text-mute">{u.when}</p>
-            <h2 className="mt-1 flex items-center gap-1 text-2xl font-black">
-              <TripIcon icon={u.icon} className="-my-2 size-10" />
-              {u.title}
-            </h2>
-            <p className="text-mute">{u.subtitle}・準備中</p>
+        {trips.length === 0 && !loading && (
+          <div className="rounded-[2rem] border-2 border-dashed border-butter bg-cream/60 p-6 text-center">
+            <p className="font-black">還沒有行程</p>
+            <p className="mt-1 text-sm text-mute">新的行程建立好之後會出現在這裡。</p>
           </div>
-        ))}
+        )}
       </div>
+      <AccountSheet open={account} onClose={() => setAccount(false)} />
     </div>
   )
 }

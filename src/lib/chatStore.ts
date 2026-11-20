@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { safeStorage, usePrefs } from './store'
-import { ApiError, applyManual, applyProposal, chat, checkPasscode, undoLast, type Proposal, type Source } from './api'
+import { ApiError, applyManual, applyProposal, chat, undoLast, type Proposal, type Source } from './api'
 import { useTrips } from './tripStore'
 import type { PreparedImage } from './images'
 
@@ -26,16 +26,16 @@ export interface Message {
 }
 
 interface ChatState {
-  passcode?: string
   /** tripId → 對話 */
   threads: Record<string, Message[]>
   busy: boolean
   /** 其他頁面請聊天框打開並先填好一句話（例如地點卡片的「排進行程」）；n 每次加一 */
   draft?: { tripId: string; text: string; n: number }
   ask: (tripId: string, text: string) => void
-  /** 在畫面上直接改（不經過小樹），例如啟用備案；需要通關密語 */
+  /** 在畫面上直接改（不經過小樹），例如啟用備案 */
   applyDirect: (tripId: string, ops: unknown[], summary: string) => Promise<void>
-  login: (passcode: string) => Promise<void>
+  /** 登出時清掉這支手機上的對話 */
+  reset: () => void
   send: (tripId: string, text: string, images?: PreparedImage[]) => Promise<void>
   stop: () => void
   apply: (tripId: string, messageId: string, proposalId: string) => Promise<void>
@@ -50,7 +50,7 @@ let controller: AbortController | undefined
 const errorText = (e: unknown) =>
   e instanceof ApiError
     ? e.status === 401
-      ? '通關密語不對，請重新輸入。'
+      ? '登入已經過期，請重新登入。'
       : e.status === 0
         ? e.message
         : `${e.message}${e.details?.length ? `：${e.details.join('；')}` : ''}`
@@ -70,14 +70,10 @@ export const useChat = create<ChatState>()(
         threads: {},
         busy: false,
 
-        login: async (passcode) => {
-          await checkPasscode(passcode)
-          set({ passcode })
-        },
+        reset: () => set({ threads: {}, busy: false, draft: undefined }),
 
         send: async (tripId, text, images = []) => {
-          const { passcode } = get()
-          if (!passcode || get().busy) return
+          if (get().busy) return
           const history = (get().threads[tripId] ?? []).filter((m) => m.text.trim() && !m.error)
           const user: Message = { id: uid(), role: 'user', text, ...(images.length && { images: images.map((i) => i.thumb) }) }
           const reply: Message = { id: uid(), role: 'assistant', text: '', streaming: true }
@@ -91,7 +87,7 @@ export const useChat = create<ChatState>()(
               { role: user.role, text, images: images.map(({ mimeType, data }) => ({ mimeType, data })) },
             ]
             let finished = false
-            for await (const e of chat(passcode, tripId, messages, controller.signal, usePrefs.getState().viewer[tripId])) {
+            for await (const e of chat(tripId, messages, controller.signal, usePrefs.getState().viewer[tripId])) {
               if (e.type === 'done') finished = true
               patch(tripId, reply.id, (m) => {
                 switch (e.type) {
@@ -116,7 +112,6 @@ export const useChat = create<ChatState>()(
           } catch (e) {
             if (!(e instanceof DOMException && e.name === 'AbortError')) {
               patch(tripId, reply.id, (m) => ({ ...m, error: errorText(e) }))
-              if (e instanceof ApiError && e.status === 401) set({ passcode: undefined })
             }
           } finally {
             patch(tripId, reply.id, (m) => ({ ...m, streaming: false }))
@@ -127,14 +122,13 @@ export const useChat = create<ChatState>()(
         stop: () => controller?.abort(),
 
         apply: async (tripId, messageId, proposalId) => {
-          const { passcode } = get()
           const target = get()
             .threads[tripId]?.find((m) => m.id === messageId)
             ?.proposals?.find((p) => p.proposal.id === proposalId)
-          if (!passcode || !target) return
+          if (!target) return
           patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'applying', error: undefined }))
           try {
-            const result = await applyProposal(passcode, tripId, target.proposal)
+            const result = await applyProposal(tripId, target.proposal)
             useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
             // 自己套用的不用再通知自己
             usePrefs.getState().markSeen(tripId, result.version)
@@ -148,9 +142,7 @@ export const useChat = create<ChatState>()(
           patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'dismissed' })),
 
         undo: async (tripId) => {
-          const { passcode } = get()
-          if (!passcode) throw new Error('需要通關密語')
-          const result = await undoLast(passcode, tripId)
+          const result = await undoLast(tripId)
           useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
           usePrefs.getState().markSeen(tripId, result.version)
           return result.summary
@@ -159,14 +151,11 @@ export const useChat = create<ChatState>()(
         clear: (tripId) => set((s) => ({ threads: { ...s.threads, [tripId]: [] } })),
 
         applyDirect: async (tripId, ops, summary) => {
-          const { passcode } = get()
-          if (!passcode) throw new Error('要先在小樹那邊輸入通關密語')
           try {
-            const result = await applyManual(passcode, tripId, ops, summary)
+            const result = await applyManual(tripId, ops, summary)
             useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })
             usePrefs.getState().markSeen(tripId, result.version)
           } catch (e) {
-            if (e instanceof ApiError && e.status === 401) set({ passcode: undefined })
             throw new Error(errorText(e), { cause: e })
           }
         },
@@ -177,10 +166,11 @@ export const useChat = create<ChatState>()(
     {
       name: 'trip-chat',
       storage: safeStorage,
-      version: 1,
-      // 只存密語與最近的對話；串流中的狀態不存
+      // 第 2 版拿掉了以前存在這裡的通關密語
+      version: 2,
+      migrate: (old) => ({ threads: (old as { threads?: Record<string, Message[]> }).threads ?? {} }),
+      // 只存最近的對話；串流中的狀態不存
       partialize: (s) => ({
-        passcode: s.passcode,
         threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, v.slice(-30).map((m) => ({ ...m, streaming: false }))])),
       }),
     },

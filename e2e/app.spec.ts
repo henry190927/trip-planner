@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { expect, test } from './fixtures'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 const trip = '#/trip/seoul-2026-11'
 

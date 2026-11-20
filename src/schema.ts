@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// 旅程資料的唯一規格：型別由這裡推導，資料檔的完整性由 src/trips/trips.test.ts 用它檢查。
+// 旅程資料的唯一規格：型別由這裡推導，寫入前一律用 validateTrip 檢查（後端、scripts/push-trip.ts、測試資料）。
 // app 只 import 型別，所以 zod 不會進到前端 bundle。
 
 const hhmm = z.string().regex(/^\d{2}:\d{2}$/, '時間格式要是 HH:MM')

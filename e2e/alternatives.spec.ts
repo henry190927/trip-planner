@@ -1,17 +1,15 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { applyOps, type Op } from '../src/lib/ops'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 // 備案：後端用 page.route 模擬，套用時真的跑 applyOps
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 const trip = '#/trip/seoul-2026-11'
 
-async function mockApi(page: Page, { passcode = true } = {}) {
+async function mockApi(page: Page) {
   let version = 4
   let current = seoul2026
   const sent: { ops: Op[]; source?: string }[] = []
-  if (passcode)
-    await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log: [] }] } }))
   await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
     const body = r.request().postDataJSON() as { ops: Op[]; source?: string }
@@ -64,17 +62,6 @@ test('遇到狀況：點「下雨」只展開對應的備案，改用之後可�
   await now.getByRole('button', { name: '換回原本排的' }).click()
   await now.getByRole('button', { name: /確定換成/ }).click()
   await expect(page.getByRole('heading', { name: '自由時間：京義線林蔭道・望遠市場' })).toBeVisible()
-})
-
-test('還沒輸入通關密語時，改用備案會提示先輸入', async ({ page }) => {
-  await mockApi(page, { passcode: false })
-  await page.goto(`./${trip}`)
-  await page.getByRole('button', { name: /DAY 2/ }).click()
-  const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'MISS 豬腳宵夜' }) })
-  await card.getByRole('button', { name: /備案 2/ }).click()
-  await card.getByRole('button', { name: '改用這個' }).first().click()
-  await card.getByRole('button', { name: /確定換成/ }).click()
-  await expect(card.getByText('要先在小樹那邊輸入通關密語')).toBeVisible()
 })
 
 test('備案可以刪除（要再確認）；「原本排的」也能刪，換上來的就成為正式行程', async ({ page }) => {

@@ -11,7 +11,6 @@ const encouragement = ['種下一顆種子吧', '發芽了！', '長出葉子了
 
 export default function ChecklistView({ trip }: { trip: Trip }) {
   const applyDirect = useChat((s) => s.applyDirect)
-  const passcode = useChat((s) => s.passcode)
   const legacy = usePrefs((s) => s.checked[trip.id])
   const clearLegacy = usePrefs((s) => s.clearChecked)
   // 已經按了、還在等伺服器的勾選（先顯示，失敗再退回）
@@ -25,7 +24,6 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
   const progress = total ? count / total : 0
 
   const toggle = (group: string, item: { id: string; label: string; done?: boolean }) => {
-    if (!passcode) return setToggleError('勾選會同步給兩個人，要先在小樹那邊輸入通關密語')
     const next = !isDone(item)
     setToggleError('')
     setPending((p) => ({ ...p, [item.id]: next }))
@@ -46,7 +44,7 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
   // 以前勾選只存在這支手機上：第一次打開時把那些勾選搬進行程，之後兩個人看到同一份
   const migrating = useRef(false)
   useEffect(() => {
-    if (!passcode || !legacy?.length || migrating.current) return
+    if (!legacy?.length || migrating.current) return
     const ids = legacy.filter((id) => trip.checklist.some((g) => g.items.some((i) => i.id === id && !i.done)))
     if (!ids.length) return clearLegacy(trip.id)
     migrating.current = true
@@ -58,7 +56,7 @@ export default function ChecklistView({ trip }: { trip: Trip }) {
       .then(() => clearLegacy(trip.id))
       .catch(() => undefined)
       .finally(() => (migrating.current = false))
-  }, [passcode, legacy, trip.checklist, trip.id, applyDirect, clearLegacy])
+  }, [legacy, trip.checklist, trip.id, applyDirect, clearLegacy])
   // 正在編輯或確認刪除的項目（同一時間只有一項）
   const [action, setAction] = useState<{ id: string; mode: 'edit' | 'delete'; text?: string; busy?: boolean; error?: string }>()
   const run = async (group: string, id: string, label: string) => {

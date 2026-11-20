@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Bell, ChevronRight, Minus, Pencil, Plus, X } from 'lucide-react'
 import type { Trip } from '../types'
 import type { Change, LogEntry } from '../lib/api'
-import { useChat } from '../lib/chatStore'
 import { relativeTime } from '../lib/dates'
 import { href } from '../lib/router'
 import { usePrefs } from '../lib/store'
@@ -53,7 +52,6 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
   const log = useTrips((s) => s.byId[trip.id]?.log) ?? noLog
   const seen = usePrefs((s) => s.seen[trip.id])
   const markSeen = usePrefs((s) => s.markSeen)
-  const passcode = useChat((s) => s.passcode)
   const [open, setOpen] = useState(false)
   // 打開時記下「之前看到哪」，面板裡才標得出哪些是新的
   const [seenAtOpen, setSeenAtOpen] = useState<number>()
@@ -158,6 +156,7 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
                             <div className={`soft-shadow rounded-3xl bg-card px-4 py-3 ${fresh ? 'ring-2 ring-peach' : ''}`}>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <Chip tone={source.tone}>{source.label}</Chip>
+                                {entry.by && <span className="text-[11px] font-extrabold text-mute">{entry.by}</span>}
                                 {fresh && <Chip tone="warn">新</Chip>}
                                 <span className="ml-auto text-[11px] font-bold text-mute">{relativeTime(entry.at)}</span>
                               </div>
@@ -169,7 +168,7 @@ export default function ActivityBell({ trip }: { trip: Trip }) {
                                   ))}
                                 </ul>
                               )}
-                              {i === 0 && passcode && entry.source !== 'sync' && <UndoButton tripId={trip.id} summary={entry.summary} />}
+                              {i === 0 && entry.source !== 'sync' && <UndoButton tripId={trip.id} summary={entry.summary} />}
                             </div>
                           </motion.li>
                         )

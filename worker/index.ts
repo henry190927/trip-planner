@@ -1,7 +1,23 @@
-import { opsSchema, tripSchema } from '../src/schema'
-import { validateTrip } from '../src/lib/validate'
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
+import { opsSchema } from '../src/schema'
 import { applyOps } from '../src/lib/ops'
 import { runAgent, type ChatEvent, type ChatImage, type ChatMessage } from './agent'
+import {
+  AuthError,
+  createInvite,
+  currentUser,
+  endSession,
+  inviteInfo,
+  loginOptions,
+  loginVerify,
+  publicUser,
+  registerOptions,
+  registerVerify,
+  removeCredential,
+  sameOrigin,
+  sessionCookie,
+  type User,
+} from './auth'
 import { imageError } from './images'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
@@ -9,48 +25,33 @@ import { loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
 
 export { GeminiRelay } from './relay-object'
 
-// API
-//   GET  /api/trips              所有行程的最新版本（公開，跟網站本身一樣）
-//   POST /api/chat               聊天（SSE 串流）            需要通關密語
-//   POST /api/trips/:id/apply    套用 AI 提出的修改           需要通關密語
-//   POST /api/trips/:id/undo     回到上一版                   需要通關密語
-//   POST /api/trips/:id/replace  用整份行程取代（scripts/push-trip.ts 用）  需要通關密語
-//   POST /api/auth               檢查通關密語
-
-function corsHeaders(req: Request, env: Env): Record<string, string> {
-  const origin = req.headers.get('origin') ?? ''
-  const allowed =
-    env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).includes(origin) ||
-    /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
-  return allowed
-    ? {
-        'access-control-allow-origin': origin,
-        'access-control-allow-methods': 'GET, POST, OPTIONS',
-        'access-control-allow-headers': 'content-type, authorization',
-        'access-control-max-age': '86400',
-        vary: 'origin',
-      }
-    : {}
-}
+// 網站和 API 由同一個 Worker 提供：/api/* 由這裡處理，其他路徑是 dist/ 的網頁檔（見 wrangler.jsonc 的 assets）。
+// 除了登入相關的端點，全部都要先登入（passkey，見 auth.ts）。
+//
+//   GET  /api/me                          目前登入的人
+//   POST /api/auth/login/options|verify   用 passkey 登入
+//   POST /api/auth/invite/info|options|verify  用邀請連結建立 passkey（新旅伴或新裝置）
+//   POST /api/auth/logout
+//   POST /api/auth/invites                產生邀請連結（給自己的新裝置，或帶 name 邀請新旅伴）
+//   POST /api/auth/credentials/remove     刪掉一台裝置的 passkey
+//   GET  /api/trips                       所有行程的最新版本
+//   POST /api/chat                        和小樹聊天（SSE 串流）
+//   POST /api/trips/:id/apply             套用修改
+//   POST /api/trips/:id/undo              復原最新一次修改
 
 /** 給網站的部分：parent 是後端內部用的 */
 const published = (s: Stored) => ({ version: s.version, updatedAt: s.updatedAt, trip: s.trip, log: s.log ?? [] })
 
 const json = (data: unknown, status = 200, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } })
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
+  })
 
-// 固定時間比較，避免從回應時間猜出密語
-function sameSecret(a: string, b: string) {
-  const enc = new TextEncoder()
-  const x = enc.encode(a)
-  const y = enc.encode(b)
-  let diff = x.length ^ y.length
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0)
-  return diff === 0
+const withCookie = (res: Response, cookie?: string) => {
+  if (cookie) res.headers.append('set-cookie', cookie)
+  return res
 }
-
-const authorized = (req: Request, env: Env) =>
-  !!env.APP_PASSCODE && sameSecret(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.APP_PASSCODE)
 
 function geminiMessage(e: unknown) {
   if (e instanceof GeminiError) {
@@ -65,25 +66,25 @@ function geminiMessage(e: unknown) {
   return `出錯了：${e instanceof Error ? e.message : String(e)}`
 }
 
-async function chat(req: Request, env: Env, cors: Record<string, string>) {
+async function chat(req: Request, env: Env) {
   const body = (await req.json().catch(() => null)) as {
     tripId?: string
     viewer?: string
     messages?: (ChatMessage & { images?: ChatImage[] })[]
   } | null
   const stored = body?.tripId ? await loadTrip(env, body.tripId) : undefined
-  if (!stored) return json({ error: '找不到這個行程' }, 404, cors)
+  if (!stored) return json({ error: '找不到這個行程' }, 404)
   const messages: ChatMessage[] = (body?.messages ?? [])
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
     .slice(-12)
     .map((m) => ({ role: m.role, text: m.text.slice(0, 2000) }))
-  if (messages.at(-1)?.role !== 'user') return json({ error: '最後一則要是使用者的訊息' }, 400, cors)
+  if (messages.at(-1)?.role !== 'user') return json({ error: '最後一則要是使用者的訊息' }, 400)
   // 圖片只收最後一則的；之前附過的不重傳
   const raw = body?.messages?.at(-1)?.images
   const images = Array.isArray(raw) ? raw : []
   if (images.length) {
     const error = imageError(images)
-    if (error) return json({ error }, 400, cors)
+    if (error) return json({ error }, 400)
     messages[messages.length - 1].images = images.map((i) => ({ mimeType: i.mimeType, data: i.data }))
   }
 
@@ -108,74 +109,115 @@ async function chat(req: Request, env: Env, cors: Record<string, string>) {
     await writer.close()
   })()
 
-  return { response: new Response(readable, { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', ...cors } }), work }
+  return { response: new Response(readable, { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store' } }), work }
+}
+
+async function readBody<T>(req: Request) {
+  return ((await req.json().catch(() => null)) ?? {}) as T
+}
+
+async function authRoutes(req: Request, env: Env, path: string): Promise<Response | undefined> {
+  switch (path) {
+    case '/api/auth/login/options':
+      return json(await loginOptions(req, env))
+    case '/api/auth/login/verify': {
+      const body = await readBody<{ challengeId?: unknown; response?: AuthenticationResponseJSON }>(req)
+      const { user, setCookie } = await loginVerify(req, env, body)
+      return withCookie(json({ user: publicUser(user) }), setCookie)
+    }
+    case '/api/auth/invite/info':
+      return json(await inviteInfo(env, (await readBody<{ code?: unknown }>(req)).code))
+    case '/api/auth/invite/options':
+      return json(await registerOptions(req, env, (await readBody<{ code?: unknown }>(req)).code))
+    case '/api/auth/invite/verify': {
+      const body = await readBody<{ code?: unknown; challengeId?: unknown; response?: RegistrationResponseJSON }>(req)
+      const { user, setCookie } = await registerVerify(req, env, body)
+      return withCookie(json({ user: publicUser(user) }), setCookie)
+    }
+    case '/api/auth/logout':
+      await endSession(req, env)
+      return withCookie(json({ ok: true }), sessionCookie('', 0))
+  }
+  return undefined
+}
+
+async function signedInRoutes(req: Request, env: Env, path: string, user: User, ctx: ExecutionContext): Promise<Response> {
+  if (req.method === 'GET' && path === '/api/me') return json({ user: publicUser(user) })
+
+  if (req.method === 'GET' && path === '/api/trips') {
+    const all = await Promise.all((await tripIds(env)).map((id) => loadTrip(env, id)))
+    return json({ trips: all.filter(Boolean).map((s) => published(s!)) })
+  }
+
+  if (req.method !== 'POST') return json({ error: 'Not found' }, 404)
+
+  if (path === '/api/auth/invites') {
+    const body = await readBody<{ name?: unknown }>(req)
+    // 帶 name：邀請新旅伴；沒帶：給自己的新裝置
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 20) : ''
+    const invite = name ? { name, createdAt: new Date().toISOString() } : { userId: user.id, name: user.name, createdAt: new Date().toISOString() }
+    return json(await createInvite(env, invite))
+  }
+  if (path === '/api/auth/credentials/remove') {
+    await removeCredential(env, user, (await readBody<{ id?: unknown }>(req)).id)
+    return json({ ok: true })
+  }
+
+  if (path === '/api/chat') {
+    const result = await chat(req, env)
+    if (result instanceof Response) return result
+    ctx.waitUntil(result.work)
+    return result.response
+  }
+
+  const m = path.match(/^\/api\/trips\/([\w-]+)\/(apply|undo)$/)
+  if (!m) return json({ error: 'Not found' }, 404)
+  const [, id, action] = m
+  const stored = await loadTrip(env, id)
+  if (!stored) return json({ error: '找不到這個行程' }, 404)
+
+  if (action === 'undo') {
+    const next = await undo(env, id, stored, user.name)
+    if (!next) return json({ error: '沒有可以復原的版本' }, 409)
+    return json({ ...published(next), summary: next.summary })
+  }
+
+  const body = await readBody<{ ops?: unknown; summary?: string; source?: string }>(req)
+  const parsed = opsSchema.safeParse(body.ops)
+  if (!parsed.success) return json({ error: '修改內容格式不對' }, 400)
+  // 一律套在最新版本上：AI 提案之後若另一個人改過，這裡會重新檢查一次
+  const applied = applyOps(stored.trip, parsed.data)
+  if (applied.errors.length) return json({ error: '這個修改跟目前的行程對不起來', details: applied.errors }, 409)
+  const next = await saveTrip(env, id, applied.trip, String(body.summary ?? '修改行程').slice(0, 200), stored, {
+    source: body.source === 'manual' ? 'manual' : 'ai',
+    changes: applied.changes,
+    by: user.name,
+  })
+  return json({ ...published(next), changes: applied.changes })
 }
 
 export default {
   async fetch(req, env, ctx): Promise<Response> {
     const url = new URL(req.url)
-    const cors = corsHeaders(req, env)
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
+    // 網頁檔（wrangler.jsonc 設定成只有 /api/* 會先進到這裡，這行是保險）
+    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req)
 
     try {
-      if (req.method === 'GET' && url.pathname === '/api/trips') {
-        const all = await Promise.all(tripIds().map((id) => loadTrip(env, id)))
-        return json({ trips: all.filter(Boolean).map((s) => published(s!)) }, 200, {
-          ...cors,
-          'cache-control': 'no-store',
-        })
+      // 會改東西的請求只接受從網站本身送來的
+      if (req.method !== 'GET' && !sameOrigin(req)) return json({ error: '不接受從其他網站送來的請求' }, 403)
+
+      if (req.method === 'POST') {
+        const auth = await authRoutes(req, env, url.pathname)
+        if (auth) return auth
       }
 
-      if (req.method !== 'POST') return json({ error: 'Not found' }, 404, cors)
-      if (!authorized(req, env)) return json({ error: '通關密語不對' }, 401, cors)
-
-      if (url.pathname === '/api/auth') return json({ ok: true }, 200, cors)
-      if (url.pathname === '/api/chat') {
-        const result = await chat(req, env, cors)
-        if (result instanceof Response) return result
-        ctx.waitUntil(result.work)
-        return result.response
-      }
-
-      const m = url.pathname.match(/^\/api\/trips\/([\w-]+)\/(apply|undo|replace)$/)
-      if (m) {
-        const [, id, action] = m
-        const stored = await loadTrip(env, id)
-        if (!stored) return json({ error: '找不到這個行程' }, 404, cors)
-
-        if (action === 'undo') {
-          const next = await undo(env, id, stored)
-          if (!next) return json({ error: '沒有可以復原的版本' }, 409, cors)
-          return json({ ...published(next), summary: next.summary }, 200, cors)
-        }
-
-        if (action === 'replace') {
-          const body = (await req.json().catch(() => null)) as { trip?: unknown; summary?: string } | null
-          const errors = validateTrip(body?.trip)
-          if (errors.length) return json({ error: '行程資料不正確', details: errors }, 400, cors)
-          const trip = tripSchema.parse(body!.trip)
-          if (trip.id !== id) return json({ error: '行程 id 不一致' }, 400, cors)
-          const next = await saveTrip(env, id, trip, String(body?.summary ?? '取代行程').slice(0, 200), stored, { source: 'sync' })
-          return json({ version: next.version }, 200, cors)
-        }
-
-        const body = (await req.json().catch(() => null)) as { ops?: unknown; summary?: string; source?: string } | null
-        const parsed = opsSchema.safeParse(body?.ops)
-        if (!parsed.success) return json({ error: '修改內容格式不對' }, 400, cors)
-        // 一律套在最新版本上：AI 提案之後若另一個人改過，這裡會重新檢查一次
-        const applied = applyOps(stored.trip, parsed.data)
-        if (applied.errors.length) return json({ error: '這個修改跟目前的行程對不起來', details: applied.errors }, 409, cors)
-        const next = await saveTrip(env, id, applied.trip, String(body?.summary ?? '修改行程').slice(0, 200), stored, {
-          source: body?.source === 'manual' ? 'manual' : 'ai',
-          changes: applied.changes,
-        })
-        return json({ ...published(next), changes: applied.changes }, 200, cors)
-      }
-
-      return json({ error: 'Not found' }, 404, cors)
+      const session = await currentUser(req, env)
+      if (!session) return json({ error: '請先登入' }, 401)
+      return withCookie(await signedInRoutes(req, env, url.pathname, session.user, ctx), session.setCookie)
     } catch (e) {
+      if (e instanceof AuthError) return json({ error: e.message }, e.status)
       console.error(e)
-      return json({ error: e instanceof Error ? e.message : String(e) }, 500, cors)
+      return json({ error: '伺服器出錯了，請稍後再試' }, 500)
     }
   },
 } satisfies ExportedHandler<Env>

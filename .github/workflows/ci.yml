@@ -1,0 +1,23 @@
+name: CI
+
+# 只做檢查。部署在本機跑 npm run deploy（Cloudflare），不需要把 Cloudflare 的金鑰放到 GitHub
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build

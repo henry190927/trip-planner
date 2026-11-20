@@ -7,3 +7,5 @@ test-results
 playwright-report
 .wrangler
 .dev.vars
+# 真實的行程資料與備份只放在本機與 Cloudflare KV，不進 git
+private/

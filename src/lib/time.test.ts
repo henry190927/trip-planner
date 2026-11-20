@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { daysBetween, formatDate, tripPhase } from './time'
 import { relativeTime } from './dates'
-import { seoul2026 } from '../trips/seoul-2026-11'
+import { seoul2026 } from '../../test/fixtures/seoul-2026-11'
 
 describe('tripPhase', () => {
   it('出發前回傳剩幾天', () => {

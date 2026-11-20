@@ -2,9 +2,13 @@
 
 手機優先的旅遊行程表，加上一個會上網查資料、能幫忙改行程的 AI 小幫手「小樹」。
 
-- 網站：<https://henry190927.github.io/trip-planner/>（PWA，可加到主畫面、離線開啟）
-- 前端：Vite + React + TypeScript + Tailwind，放在 GitHub Pages
-- 後端：Cloudflare Worker（行程資料、AI 對話），AI 用 Gemini，搜尋用 Tavily
+- 網站：<https://trip-chat.travel-planner-hm1d.workers.dev>（PWA，可加到主畫面、離線開啟；要登入）
+- 前端：Vite + React + TypeScript + Tailwind
+- 後端：Cloudflare Worker（網站、登入、行程資料、AI 對話），AI 用 Gemini，搜尋用 Tavily
+- 登入：passkey（Face ID／指紋），沒有密碼
+
+**程式碼公開，資料不公開。** 這個 repo 裡沒有任何真實的行程；行程、修改紀錄、帳號都只存在 Cloudflare KV，登入才拿得到。
+`test/fixtures/` 裡的行程是測試用的資料（住宿、航班是假的）。
 
 ## 系統架構
 
@@ -16,12 +20,10 @@ flowchart LR
     app <--> cache
   end
 
-  pages["GitHub Pages<br/>靜態網站"]
-  pages -- "下載網站<br/>(Service Worker 快取)" --> app
-
   subgraph cf["☁️ Cloudflare"]
+    assets["網頁檔<br/>(dist/)"]
     worker["Worker<br/>trip-chat"]
-    kv[("KV<br/>行程・每一版歷史")]
+    kv[("KV<br/>行程・每一版歷史<br/>帳號・登入狀態")]
     relay["Durable Object<br/>固定在美西的轉發器"]
     dns["家庭版 DNS<br/>網域信譽"]
     worker <--> kv
@@ -32,8 +34,9 @@ flowchart LR
   gemini["Gemini<br/>3.6 Flash → 備用的 Flash-Lite"]
   tavily["Tavily<br/>網頁搜尋"]
 
-  app -- "讀行程（公開）" --> worker
-  app -- "聊天・套用・復原<br/>（要通關密語）" --> worker
+  assets -- "下載網站<br/>(Service Worker 快取)" --> app
+  app -- "passkey 登入" --> worker
+  app -- "讀行程・聊天・套用・復原<br/>（都要登入）" --> worker
   relay --> gemini
   worker --> tavily
 
@@ -42,9 +45,9 @@ flowchart LR
   classDef store fill:#FFF4DE,stroke:#d9a441,color:#4a3428
   classDef ext fill:#FFE8C4,stroke:#d9a441,color:#4a3428
   class app client
-  class worker,relay,dns edge
+  class worker,relay,dns,assets edge
   class kv,cache store
-  class pages,gemini,tavily ext
+  class gemini,tavily ext
   style phone fill:#FCF0DA,stroke:#e8c99a
   style cf fill:#eaf6ff,stroke:#97D7FF
 ```
@@ -54,7 +57,37 @@ flowchart LR
 - **行程是共用的，對話是各自的**：按下「套用」的修改存在後端，兩支手機都看得到；聊天紀錄只存在自己的手機。
 - **AI 只能改資料，不能改介面**：AI 送出的是幾種固定的「修改動作」，介面永遠是同一套。
 - **人工確認**：AI 的修改不會直接生效，要使用者按「套用」；每一版都保留，可以復原。
-- **離線也能看**：行程依序從後端 → 這支手機上次存的版本 → 網站內建的版本讀取。
+- **離線也能看**：登入過的手機會存一份最新的行程，連不上網路時先用那份；登出時清掉。
+- **網站和 API 同一個網址**：登入狀態放在 JavaScript 讀不到的 cookie（`HttpOnly`、`SameSite=Strict`），不用跨網域傳。
+
+## 登入與資料保護
+
+每個人用 passkey 登入：手機上的 Face ID／指紋確認是本人，私鑰留在裝置裡（Apple 裝置之間由 iCloud 鑰匙圈同步）。
+沒有密碼可以外洩、也沒辦法被釣魚網站騙走（passkey 綁定這個網址），所以不另外做簡訊或驗證碼的兩步驟驗證。
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#FFCCB8', 'actorBorder': '#c4583a', 'actorTextColor': '#4a3428', 'actorLineColor': '#e8c99a', 'signalColor': '#4a3428', 'signalTextColor': '#4a3428', 'noteBkgColor': '#FFE8C4', 'noteBorderColor': '#d9a441', 'noteTextColor': '#4a3428'}}}%%
+sequenceDiagram
+  actor A as 已登入的人
+  actor B as 新旅伴（或自己的新裝置）
+  participant W as Worker
+  participant K as KV
+
+  A->>W: 帳號 → 產生邀請連結
+  W->>K: 只存連結的雜湊（24 小時、用一次就失效）
+  A-->>B: 傳連結
+  B->>W: 打開連結 → 建立 passkey（Face ID）
+  W->>W: 驗證 passkey、刪掉邀請
+  W->>K: 存公鑰、登入狀態（只存雜湊）
+  W-->>B: cookie（HttpOnly、30 天、常用會自動延長）
+  note over B,W: 之後打開 App：按「用 Face ID／指紋登入」
+```
+
+- **除了登入相關的端點，API 都要登入**；會改東西的請求另外檢查 `Origin`，只接受網站本身送來的。
+- **手機遺失**：從另一台裝置的「帳號」移除它，用它登入的狀態立刻失效。
+- **兩個人的手機都不見**：在電腦上 `npm run users` 找到帳號 id，`npm run invite -- --user <id>` 產生恢復用的邀請連結（用你自己登入的 wrangler 寫進 KV，不經過網站）。
+- **變動紀錄記下是誰改的**，鈴鐺裡看得到。
+- 網頁帶著 Content-Security-Policy 等安全標頭（`public/_headers`）。
 
 ## AI 小幫手怎麼運作
 
@@ -72,7 +105,7 @@ sequenceDiagram
   participant K as KV
 
   U->>A: 「幫我查三間店的營業時間，加到第二天」
-  A->>W: POST /api/chat（通關密語、最近 12 則對話）
+  A->>W: POST /api/chat（登入 cookie、最近 12 則對話）
   W->>K: 讀最新的行程
   W->>G: 系統提示 + 整份行程 + 對話 + 工具清單
   G-->>W: 呼叫 web_search（三個問題）
@@ -153,25 +186,26 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  code["src/trips/*.ts<br/>程式碼裡的行程"] -- "npm run push-trip" --> kv[("KV<br/>線上的行程")]
-  ai["小樹的修改<br/>（按下套用）"] --> kv
-  kv -- "打開網站・切回前景時" --> app["網站畫面"]
+  file["private/*.ts<br/>電腦上的行程檔<br/>（不進 git）"] -- "npm run push-trip" --> kv[("KV<br/>線上的行程")]
+  ai["小樹的修改・畫面上的操作<br/>（按下套用）"] --> kv
+  kv -- "登入後・切回前景時" --> app["網站畫面"]
+  kv -- "npm run pull-trip" --> file
   local[("這支手機上次<br/>存的版本")] -. "連不上後端時" .-> app
-  bundled["網站內建的版本"] -. "連本機也沒有時" .-> app
-  app -- "存一份" --> local
+  app -- "存一份（登出時清掉）" --> local
 
   classDef s fill:#FFF4DE,stroke:#d9a441,color:#4a3428
   classDef a fill:#97D7FF,stroke:#1f74ad,color:#123a57
   classDef c fill:#FFCCB8,stroke:#c4583a,color:#4a3428
   class kv,local s
   class app a
-  class code,ai,bundled c
+  class file,ai c
 ```
 
-⚠️ 線上的行程以 KV 為準。直接改了 `src/trips/` 的行程檔之後，要跑一次 `push-trip` 才會上線（舊版一樣保留、可以復原）：
+⚠️ 線上的行程以 KV 為準。要用電腦上的檔案整份取代之前，一定先拉最新版下來對照，不然 App 裡改過的內容會被蓋掉（被蓋掉的版本仍保留、可以復原）：
 
 ```bash
-APP_PASSCODE=<通關密語> npm run push-trip -- seoul-2026-11
+npm run pull-trip -- busan-2026-12                       # 存到 private/busan-2026-12.json
+npm run push-trip -- private/busan-2026-12.json --replace
 ```
 
 ## 開發
@@ -180,33 +214,42 @@ APP_PASSCODE=<通關密語> npm run push-trip -- seoul-2026-11
 npm install
 npm run dev      # 終端機會印出 Network 網址，手機連同一個 Wi-Fi 就能開
 npm run build    # 產出 dist/
-npm run check    # oxlint + 型別（前端與 Worker）+ 單元測試（CI 部署前也會跑）
-npm run test:e2e # Playwright，用本機 Chrome 以 iPhone 尺寸跑，截圖在 e2e/screenshots/
+npm run check    # oxlint + 型別（前端與 Worker）+ 單元測試（CI 也會跑）
+npm run test:e2e # Playwright，用本機 Chrome 以 iPhone 尺寸跑（後端用 page.route 模擬），截圖在 e2e/screenshots/
+npm run test:auth # 登入的端對端測試：本機的 Worker + 暫存 KV + Chrome 的虛擬 passkey，不碰線上資料
 ```
 
-本機開發時一樣連線上的 Worker（網址在 `.env` 的 `VITE_API_BASE`），Worker 允許 localhost 與區網 IP 呼叫。
+本機開發：另開一個終端機跑 `npx wrangler dev`（本機的 Worker 與 KV），`npm run dev` 會把 `/api` 轉過去。
+本機 KV 是空的：用 `KV_LOCAL=.wrangler/state npm run push-trip -- <行程檔>` 放一份行程、`KV_LOCAL=.wrangler/state npm run invite -- <名字>` 產生邀請連結（`SITE_URL=http://localhost:5173`）。
 
 ### 專案結構
 
 ```
 src/
   schema.ts         資料格式的唯一來源（Zod）：行程、AI 的修改動作
-  trips/            每趟旅行的資料
   lib/
     ops.ts          套用 AI 的修改動作
     validate.ts     整份行程的完整性檢查（時間排序、路線連結、旅伴 id…）
-    tripStore.ts    行程從哪裡讀：後端 → 本機快取 → 內建
+    tripStore.ts    行程：後端 → 本機快取（離線用）
+    authStore.ts    登入狀態、passkey 登入與加入
     chatStore.ts    聊天紀錄、串流、套用與復原
   components/       畫面（ChatSheet 是聊天框，illustrations 是手繪插圖）
 worker/
-  index.ts          API 路由、通關密語、CORS
+  index.ts          API 路由（網頁檔以外的 /api/*）
+  auth.ts           passkey 登入、邀請連結、登入狀態
   agent.ts          對話迴圈、工具定義、系統提示
   gemini.ts         呼叫 Gemini（串流、重試、備用模型）
   relay.ts          固定在美西的轉發器
   search.ts         Tavily 搜尋與同時查多項
   safety.ts         搜尋結果的安全過濾
   store.ts          KV：行程與每一版歷史、復原
-scripts/push-trip.ts  把程式碼裡的行程推上線
+scripts/              用你登入的 wrangler 直接讀寫線上 KV
+  push-trip.ts      把電腦上的行程檔放上線（建立或取代）
+  pull-trip.ts      把線上最新版存到 private/
+  invite.ts         產生邀請連結（第一次設定、或恢復用）
+  users.ts          列出帳號與裝置
+test/fixtures/      測試用的行程
+private/            真實的行程檔與備份（.gitignore，不進 git）
 ```
 
 ## 技術選擇
@@ -214,26 +257,34 @@ scripts/push-trip.ts  把程式碼裡的行程推上線
 Vite 8 + React + TypeScript + Tailwind CSS v4，動畫用 Motion。另外用了：
 
 - **Zod**：`src/schema.ts` 是資料格式的唯一來源，前端型別從它推導；Worker 用它驗證 AI 送來的修改
-- **Zustand**：行程、聊天紀錄、「看誰的行程」與清單勾選
-- **Cloudflare Worker + KV + Durable Object**：免費方案就夠兩個人用
+- **Zustand**：登入狀態、行程、聊天紀錄、「看誰的行程」
+- **SimpleWebAuthn**：passkey 的註冊與驗證（前端呼叫瀏覽器、Worker 驗簽章）
+- **Cloudflare Worker + KV + Durable Object**：網站、API、資料都在同一個 Worker，免費方案就夠兩個人用
 - **Vitest / Playwright / Oxlint**：單元測試、手機尺寸 e2e、lint
 
 刻意沒用：Next.js（純靜態、不需要 SSR）、TanStack Router（只有四個分頁，30 行的 hash router 就夠）、TanStack Query / MSW（只有幾支 API，Zustand 就能管）、shadcn/ui（介面全是自製插畫風元件）、Storybook、Sentry（兩個人用，成本大於效益）。
 
 ## 新增一趟旅行
 
-1. 複製 `src/trips/seoul-2026-11.ts` 成新檔（例如 `nagoya-2026-12.ts`），依 `src/types.ts` 的 `Trip` 格式填資料
-2. 在 `src/trips/index.ts` 的 `trips` 陣列加進去（並從 `upcoming` 拿掉）
-3. `npm run check`：資料寫錯（時間沒排序、routeId 打錯、旅伴 id 不存在）會在這裡被擋下
-4. `npm run deploy:worker`：Worker 把 `src/trips/` 打包進去當新行程的初始版本，重新部署後端才有這趟旅行
+1. 在 `private/` 建一個行程檔（例如 `private/busan-2026-12.ts`，`export default` 一個 `Trip`），格式見 `src/schema.ts`；可以參考 `test/fixtures/seoul-2026-11.ts`
+2. `npm run push-trip -- private/busan-2026-12.ts`：先檢查格式與完整性（時間排序、routeId、旅伴 id），通過才建立
+3. 打開 App 就看得到；之後在 App 裡或請小樹修改
 
 介面不用改。每趟旅行自己決定時區（`timezone`）、地圖 App（`mapProvider`）、旅伴（`travelers`，可以讓某些項目只屬於某個人）、每天的插圖（`scene`）。
 
 ## 部署
 
-- **網站**：push 到 `main` 後，GitHub Actions 會跑 `npm run check`、build，再發布到 GitHub Pages
-  （repo 的 Settings → Pages → Source 要選「GitHub Actions」）
-- **Worker**：`npm run deploy:worker`。機密設定用 `npx wrangler secret put <名稱>` 設定，不寫進程式碼：
-  `GEMINI_API_KEY`、`TAVILY_API_KEY`、`APP_PASSCODE`
+```bash
+npm run deploy   # build 網站，連同 Worker 一起部署到 Cloudflare
+```
 
-⚠️ GitHub Pages 是公開網址：不要放訂位代號、護照號碼這類資料。
+- 機密設定用 `npx wrangler secret put <名稱>` 設定，不寫進程式碼：`GEMINI_API_KEY`、`TAVILY_API_KEY`
+- push 到 `main` 時 GitHub Actions 會跑 `npm run check`（只檢查，不部署）
+
+### 自己架一份
+
+1. Fork 這個 repo，`npm install`
+2. `npx wrangler kv namespace create TRIPS`，把 id 換進 `wrangler.jsonc`
+3. 設定上面兩個機密，`npm run deploy`
+4. `npm run invite -- <你的名字>` 產生第一個邀請連結，在手機上打開、建立 passkey
+5. `npm run push-trip -- <行程檔>` 放進第一趟旅行

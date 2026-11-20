@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { integrityErrors, validateTrip } from '../lib/validate'
-import { trips } from '.'
+import { integrityErrors, validateTrip } from '../../src/lib/validate'
+import { seoul2026 } from './seoul-2026-11'
 
-// 資料檔是手寫的，這裡把「型別檢查抓不到」的錯誤擋在部署之前
+const trips = [seoul2026]
+
+// 測試用的行程是手寫的，這裡把「型別檢查抓不到」的錯誤擋在部署之前
 describe.each(trips.map((t) => [t.id, t] as const))('%s', (_, trip) => {
   it('符合 schema 與資料完整性規則', () => {
     expect(validateTrip(trip)).toEqual([])

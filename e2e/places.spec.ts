@@ -1,12 +1,8 @@
-import { expect, test } from '@playwright/test'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { expect, test } from './fixtures'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
-// 地點分頁：用網站內建的行程（後端連不上時的狀態）
+// 地點分頁：後端回傳測試用的行程（見 fixtures.ts）
 const trip = '#/trip/seoul-2026-11'
-
-test.beforeEach(async ({ page }) => {
-  await page.route('**/api/**', (r) => r.abort())
-})
 
 test('列出已排進行程與口袋名單，可以依分類篩選，點「已排入」跳到那一天', async ({ page }) => {
   await page.goto(`./${trip}/places`)
@@ -44,8 +40,6 @@ test('列出已排進行程與口袋名單，可以依分類篩選，點「已�
 })
 
 test('口袋名單的「請小樹排進行程」會打開聊天框並先填好', async ({ page }) => {
-  // 模擬已經輸入過通關密語
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.goto(`./${trip}/places`)
   await page.locator('#spot-mega-coffee').getByRole('button', { name: '請小樹排進行程' }).click()
   const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
@@ -55,12 +49,10 @@ test('口袋名單的「請小樹排進行程」會打開聊天框並先填好',
 
 test.describe('編輯、刪除、新增地點', () => {
   test.beforeEach(async ({ page }) => {
-    await page.unrouteAll()
-    const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+    const API = ''
     const { applyOps } = await import('../src/lib/ops')
     let current = seoul2026
     let version = 7
-    await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
     await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log: [] }] } }))
     await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
       const body = r.request().postDataJSON()

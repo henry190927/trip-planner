@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { trips } from '../src/trips'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
+
+const trips = [seoul2026]
 import { checkAgentOps, linkKey, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, urlsIn, type ChatEvent } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'

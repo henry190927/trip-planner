@@ -1,12 +1,11 @@
-import { expect, test } from '@playwright/test'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { expect, test } from './fixtures'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 // 動態調整：快捷按鈕要用「現在幾點」，所以把時鐘固定在旅程中
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 const trip = '#/trip/seoul-2026-11'
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version: 7, trip: seoul2026, log: [] }] } }))
 })
 

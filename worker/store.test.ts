@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { trips } from '../src/trips'
-import type { Env } from './env'
-import { loadTrip, saveTrip, undo } from './store'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
-function fakeEnv() {
+const trips = [seoul2026]
+import type { Env } from './env'
+import { createTrip, loadTrip, saveTrip, tripIds, undo } from './store'
+
+function emptyEnv() {
   const kv = new Map<string, string>()
   const TRIPS = {
     get: async (k: string) => (kv.has(k) ? JSON.parse(kv.get(k)!) : null),
     put: async (k: string, v: string) => void kv.set(k, v),
   }
   return { TRIPS } as unknown as Env
+}
+
+// 有一個行程（第 0 版）的 KV；版號從 0 開始，跟測試原本的寫法一致
+function fakeEnv() {
+  const env = emptyEnv()
+  const v0 = { version: 0, updatedAt: new Date(0).toISOString(), summary: '初始版本', trip: trips[0] }
+  void env.TRIPS.put(`trip:${trips[0].id}`, JSON.stringify(v0))
+  void env.TRIPS.put(`trip:${trips[0].id}:v:0`, JSON.stringify(v0))
+  return env
 }
 
 const id = trips[0].id
@@ -61,5 +72,27 @@ describe('變動紀錄', () => {
     for (let i = 0; i < 55; i++) cur = await saveTrip(env, id, cur.trip, `第 ${i + 1} 次`, cur, { source: 'ai' })
     expect(cur.log).toHaveLength(50)
     expect(cur.log![0].summary).toBe('第 55 次')
+  })
+})
+
+describe('行程只存在 KV', () => {
+  it('建立行程：第 1 版，加進清單；同 id 再建立會被拒絕', async () => {
+    const env = emptyEnv()
+    expect(await tripIds(env)).toEqual([])
+    expect(await loadTrip(env, id)).toBeUndefined()
+    const first = await createTrip(env, trips[0], '建立行程')
+    expect(first.version).toBe(1)
+    expect(first.parent).toBeUndefined()
+    expect(await tripIds(env)).toEqual([id])
+    await expect(createTrip(env, trips[0], '再建一次')).rejects.toThrow('已經有')
+  })
+
+  it('變動紀錄記下是誰改的', async () => {
+    const env = fakeEnv()
+    const v0 = (await loadTrip(env, id))!
+    const v1 = await saveTrip(env, id, v0.trip, '加逛街', v0, { source: 'ai', changes: [added], by: '她' })
+    expect(v1.log![0].by).toBe('她')
+    const u = (await undo(env, id, v1, '我'))!
+    expect(u.log![0]).toMatchObject({ source: 'undo', by: '我' })
   })
 })

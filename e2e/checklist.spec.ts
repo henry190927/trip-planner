@@ -1,14 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, testUser } from './fixtures'
 import { applyOps, type Op } from '../src/lib/ops'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 
 test('清單項目可以刪除（要再確認）、改文字（勾選狀態留著）', async ({ page }) => {
   let current = seoul2026
   let version = 32
   const sent: Op[][] = []
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log: [] }] } }))
   await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
     const body = r.request().postDataJSON() as { ops: Op[] }
@@ -51,6 +50,7 @@ test('勾選存在行程裡：另一支手機重新整理也看得到；以前�
   let current = seoul2026
   let version = 40
   const serve = async (page: import('@playwright/test').Page) => {
+    await page.route(`${API}/api/me`, (r) => r.fulfill({ json: { user: testUser } }))
     await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log: [] }] } }))
     await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
       const result = applyOps(current, (r.request().postDataJSON() as { ops: Op[] }).ops)
@@ -62,7 +62,6 @@ test('勾選存在行程裡：另一支手機重新整理也看得到；以前�
   // 她的手機：舊版在手機上勾過 Papago
   const hers = await (await browser.newContext({ baseURL })).newPage()
   await hers.addInitScript(() => {
-    localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 }))
     if (!localStorage.getItem('trip-prefs'))
       localStorage.setItem('trip-prefs', JSON.stringify({ state: { viewer: {}, checked: { 'seoul-2026-11': ['papago'] }, seen: {}, collapsed: [] }, version: 1 }))
   })
@@ -78,8 +77,4 @@ test('勾選存在行程裡：另一支手機重新整理也看得到；以前�
   await mine.goto('./#/trip/seoul-2026-11/list')
   await expect(mine.getByRole('checkbox', { name: 'Papago 翻譯' })).toHaveAttribute('aria-checked', 'true')
   await expect(mine.getByRole('checkbox', { name: 'Kakao T 註冊、綁卡' })).toHaveAttribute('aria-checked', 'true')
-  // 沒輸入通關密語時不能勾，會提示
-  await mine.getByRole('checkbox', { name: 'Papago 翻譯' }).click()
-  await expect(mine.getByText('要先在小樹那邊輸入通關密語')).toBeVisible()
-  await expect(mine.getByRole('checkbox', { name: 'Papago 翻譯' })).toHaveAttribute('aria-checked', 'true')
 })

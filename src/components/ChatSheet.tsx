@@ -1,8 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ArrowDown, ArrowUp, Check, Copy, Globe, ImagePlus, LoaderCircle, Minus, Pencil, Plus, Square, Trash2, X } from 'lucide-react'
 import type { Trip } from '../types'
-import { API_BASE } from '../lib/api'
 import { useChat, type Message, type ProposalState } from '../lib/chatStore'
 import { Sprout, Sparkle } from './illustrations'
 import { conversationText, copyText, messageText } from '../lib/chatText'
@@ -15,13 +14,19 @@ import UndoButton from './UndoButton'
 import { useTrips } from '../lib/tripStore'
 import { gradient } from './ui'
 
-const suggestions = [
-  '11/7 早上幫我在延南洞加一間咖啡廳',
-  'MISS 豬腳營業到幾點？',
-  '11/6 取票前，KBS Arena 附近有什麼可以快速吃的？',
-  '首爾 11 月初的天氣要怎麼穿？',
-  '11/7 午餐晚了 30 分，幫我調整後面的行程',
-]
+const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`
+
+/** 空白聊天時的建議問題：依打開的行程產生 */
+export function suggestionsFor(trip: Trip) {
+  const day = trip.days[1] ?? trip.days[0]
+  const spot = trip.spots?.find((s) => s.category === 'food') ?? trip.spots?.[0]
+  return [
+    day && `${md(day.date)} 早上幫我加一間咖啡廳`,
+    spot && `${spot.place.name}營業到幾點？`,
+    `${trip.title} ${Number(trip.startDate.slice(5, 7))} 月的天氣要怎麼穿？`,
+    day && `${md(day.date)} 午餐晚了 30 分，幫我調整後面的行程`,
+  ].filter((s): s is string => !!s)
+}
 
 function MiniSprout({ className = 'size-9' }: { className?: string }) {
   return (
@@ -200,46 +205,6 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
   )
 }
 
-function PasscodeGate() {
-  const login = useChat((s) => s.login)
-  const [value, setValue] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      await login(value.trim())
-    } catch {
-      setError('通關密語不對，或是連不上網路。')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form onSubmit={submit} className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-      <Sprout className="w-28" />
-      <p className="text-lg font-black">先輸入通關密語</p>
-      <p className="text-sm text-mute">每支手機只要輸入一次。</p>
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        autoCapitalize="off"
-        autoCorrect="off"
-        autoComplete="current-password"
-        type="password"
-        placeholder="通關密語"
-        className="w-full max-w-60 rounded-2xl border-2 border-butter bg-card px-4 py-2.5 text-center font-bold outline-none focus:border-sky"
-      />
-      {error && <p className="text-xs font-bold text-peach-ink">{error}</p>}
-      <button type="submit" disabled={!value.trim() || busy} className={`rounded-full px-6 py-2.5 font-black ${gradient} disabled:opacity-50`}>
-        {busy ? '確認中…' : '開始聊天'}
-      </button>
-    </form>
-  )
-}
-
 export default function ChatSheet({ trip }: { trip: Trip }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -254,7 +219,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     setOpen(true)
     setInput(draft.text)
   }
-  const passcode = useChat((s) => s.passcode)
   const messages = useChat((s) => s.threads[trip.id]) ?? []
   const busy = useChat((s) => s.busy)
   const send = useChat((s) => s.send)
@@ -313,7 +277,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     }
   }, [open])
 
-  if (!API_BASE) return null
 
   const attach = async (files: FileList | null) => {
     if (!files?.length) return
@@ -404,10 +367,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
               </header>
 
 
-              {!passcode ? (
-                <PasscodeGate />
-              ) : (
-                <>
                   <div className="relative min-h-0 flex-1">
                   <div ref={listRef} onScroll={onListScroll} className="h-full space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
                     {messages.length === 0 && (
@@ -416,7 +375,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                         <p className="mt-2 text-lg font-black">嗨！我是小樹</p>
                         <p className="mt-1 text-sm text-mute">想加什麼行程、查什麼資料，都可以問我。</p>
                         <div className="mt-5 flex flex-col gap-2">
-                          {suggestions.map((s) => (
+                          {suggestionsFor(trip).map((s) => (
                             <button
                               key={s}
                               type="button"
@@ -542,8 +501,6 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                       </button>
                     )}
                   </form>
-                </>
-              )}
             </motion.section>
           </>
         )}

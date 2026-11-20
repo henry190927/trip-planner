@@ -1,9 +1,9 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 import { applyOps, type Op } from '../src/lib/ops'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 // 小任務：後端用 page.route 模擬，套用時真的跑 applyOps
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 const trip = '#/trip/seoul-2026-11'
 const day2 = '2026-11-07'
 
@@ -29,7 +29,6 @@ async function mockApi(page: Page) {
   let current = base
   let version = 9
   const sent: Op[][] = []
-  await page.addInitScript(() => localStorage.setItem('trip-chat', JSON.stringify({ state: { passcode: 'x', threads: {} }, version: 1 })))
   await page.route(`${API}/api/trips`, (r) => r.fulfill({ json: { trips: [{ version, trip: current, log: [] }] } }))
   await page.route(`${API}/api/trips/seoul-2026-11/apply`, (r) => {
     const body = r.request().postDataJSON() as { ops: Op[] }

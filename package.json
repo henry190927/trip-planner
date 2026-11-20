@@ -10,11 +10,17 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:auth": "playwright test -c playwright.auth.config.ts",
     "check": "npm run lint && tsc -b && tsc -p worker && npm test",
     "push-trip": "tsx scripts/push-trip.ts",
-    "deploy:worker": "wrangler deploy"
+    "pull-trip": "tsx scripts/pull-trip.ts",
+    "invite": "tsx scripts/invite.ts",
+    "users": "tsx scripts/users.ts",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
     "lucide-react": "^1.61.0",
     "motion": "^14.6.0",
     "react": "^19.3.1",

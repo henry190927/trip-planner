@@ -86,7 +86,7 @@ export default function SpotEditor({ trip, spot, open, onClose }: { trip: Trip; 
               }}
             >
               <Field label="名稱">
-                <input value={form.name} onChange={set('name')} className={inputClass} placeholder="例如：MISS 豬腳 弘大店" />
+                <input value={form.name} onChange={set('name')} className={inputClass} placeholder="店名，有分店的話加上分店名" />
               </Field>
               <Field label="當地名稱" hint="用韓文、日文店名，地圖比較搜得到">
                 <input value={form.local} onChange={set('local')} className={inputClass} />
@@ -123,7 +123,7 @@ export default function SpotEditor({ trip, spot, open, onClose }: { trip: Trip; 
                 <input value={form.closed} onChange={set('closed')} className={inputClass} placeholder="例如：每週二" />
               </Field>
               <Field label="怎麼去">
-                <input value={form.access} onChange={set('access')} className={inputClass} placeholder="例如：弘大入口站 9 號出口走路 3 分" />
+                <input value={form.access} onChange={set('access')} className={inputClass} placeholder="例如：地鐵站 9 號出口走路 3 分" />
               </Field>
               <Field
                 label="地圖連結"

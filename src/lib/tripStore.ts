@@ -1,11 +1,10 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { trips as bundled } from '../trips'
 import type { Trip } from '../types'
 import { fetchTrips, type Versioned } from './api'
 
-// 行程資料的來源順序：後端最新版 → 這支手機上次拿到的版本 → 網站內建的版本。
-// 出國沒網路時，就用上次存下來的那份。
+// 行程資料只放在後端（登入才拿得到），網站本身不含任何行程。
+// 拿到的最新版會存在這支手機上：出國沒網路時就用上次存下來的那份；登出時清掉。
 const CACHE_KEY = 'trip-cache-v1'
 
 function readCache(): Record<string, Versioned> {
@@ -24,6 +23,17 @@ function writeCache(data: Record<string, Versioned>) {
   }
 }
 
+export const hasTripCache = () => Object.keys(readCache()).length > 0
+
+export function clearTripCache() {
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    // 沒有也沒關係
+  }
+  useTrips.setState({ byId: {}, status: 'idle' })
+}
+
 interface TripState {
   byId: Record<string, Versioned>
   status: 'idle' | 'loading' | 'live' | 'offline'
@@ -31,20 +41,15 @@ interface TripState {
   replace: (v: Versioned) => void
 }
 
-const initial = (): Record<string, Versioned> => {
-  const cache = readCache()
-  return Object.fromEntries(bundled.map((t) => [t.id, cache[t.id] ?? { version: -1, trip: t }]))
-}
-
 export const useTrips = create<TripState>()((set, get) => ({
-  byId: initial(),
+  byId: readCache(),
   status: 'idle',
   refresh: async () => {
     set({ status: 'loading' })
     try {
       const { trips } = await fetchTrips()
-      const byId = { ...get().byId }
-      for (const v of trips) byId[v.trip.id] = v
+      // 以後端為準：後端已經沒有的行程（例如刪掉了）也從這支手機上拿掉
+      const byId = Object.fromEntries(trips.map((v) => [v.trip.id, v]))
       writeCache(byId)
       set({ byId, status: 'live' })
     } catch {
@@ -59,4 +64,6 @@ export const useTrips = create<TripState>()((set, get) => ({
 }))
 
 export const useTrip = (id?: string): Trip | undefined => useTrips((s) => (id ? s.byId[id]?.trip : undefined))
-export const useTripList = () => useTrips(useShallow((s) => bundled.map((t) => s.byId[t.id]?.trip ?? t)))
+/** 首頁的行程清單：新的（出發日期晚的）在前 */
+export const useTripList = () =>
+  useTrips(useShallow((s) => Object.values(s.byId).map((v) => v.trip).sort((a, b) => b.startDate.localeCompare(a.startDate))))

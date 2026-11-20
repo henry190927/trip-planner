@@ -1,8 +1,8 @@
-import { expect, test, type Page } from '@playwright/test'
-import { seoul2026 } from '../src/trips/seoul-2026-11'
+import { expect, test, type Page } from './fixtures'
+import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 // 右上角的行程動態：後端用 page.route 模擬
-const API = 'https://trip-chat.travel-planner-hm1d.workers.dev'
+const API = ''
 const trip = '#/trip/seoul-2026-11'
 
 const older = { version: 1, at: '2026-10-20T01:00:00Z', source: 'sync', summary: '從程式碼同步', changes: [] }
