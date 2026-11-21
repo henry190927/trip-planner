@@ -9,17 +9,29 @@ test('登入過期：回到登入畫面，看不到行程', async ({ page }) => 
   await expect(page.getByRole('heading', { name: '落地直奔場館' })).toHaveCount(0)
 })
 
-test('打開邀請連結：顯示邀請誰，按鈕是建立 passkey', async ({ page }) => {
+test('打開邀請連結：新旅伴自己輸入名字，填了才能建立 passkey', async ({ page }) => {
   await page.route('**/api/me', (r) => r.fulfill({ status: 401, json: { error: '請先登入' } }))
   let asked = ''
   await page.route('**/api/auth/invite/info', (r) => {
     asked = (r.request().postDataJSON() as { code: string }).code
-    return r.fulfill({ json: { name: '她', newDevice: false } })
+    return r.fulfill({ json: { newDevice: false } })
   })
   await page.goto('./#/join/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')
-  await expect(page.getByText('歡迎，她')).toBeVisible()
-  await expect(page.getByRole('button', { name: '建立 passkey' })).toBeVisible()
+  await expect(page.getByText('歡迎加入')).toBeVisible()
+  const button = page.getByRole('button', { name: '建立 passkey' })
+  await expect(button).toBeDisabled()
+  await page.getByRole('textbox', { name: '你的名字' }).fill('小美')
+  await expect(button).toBeEnabled()
   expect(asked).toBe('abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')
+})
+
+test('加新裝置的邀請連結：不用再填名字', async ({ page }) => {
+  await page.route('**/api/me', (r) => r.fulfill({ status: 401, json: { error: '請先登入' } }))
+  await page.route('**/api/auth/invite/info', (r) => r.fulfill({ json: { name: '小美', newDevice: true } }))
+  await page.goto('./#/join/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')
+  await expect(page.getByText('小美，把這台裝置加進來')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: '你的名字' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '建立 passkey' })).toBeEnabled()
 })
 
 test('用過的邀請連結：說明要再產生一個', async ({ page }) => {
@@ -51,14 +63,12 @@ test('帳號：列出裝置、產生新裝置與新旅伴的邀請連結、移�
   await sheet.getByRole('button', { name: '加一台我自己的新裝置' }).click()
   await expect(sheet.getByText(/#\/join\/code-1-/)).toBeVisible()
   await expect(sheet.getByText('24 小時內有效，用一次就失效。只傳給要加入的人。')).toBeVisible()
-  expect(invites[0]).toEqual({})
+  expect(invites[0]).toEqual({ for: 'device' })
   await sheet.getByRole('button', { name: '完成' }).click()
 
   await sheet.getByRole('button', { name: '邀請新旅伴' }).click()
-  await sheet.getByRole('textbox', { name: '新旅伴的名字' }).fill('小美')
-  await sheet.getByRole('button', { name: '產生連結' }).click()
   await expect(sheet.getByText(/#\/join\/code-2-/)).toBeVisible()
-  expect(invites[1]).toEqual({ name: '小美' })
+  expect(invites[1]).toEqual({ for: 'person' })
 
   await sheet.getByRole('button', { name: '移除「Mac」' }).click()
   expect(removed).toHaveLength(0)
@@ -69,6 +79,22 @@ test('帳號：列出裝置、產生新裝置與新旅伴的邀請連結、移�
   expect(removed).toEqual([{ id: 'cred-mac' }])
   // 只剩一台時沒有移除按鈕
   await expect(sheet.getByRole('button', { name: /移除「/ })).toHaveCount(0)
+})
+
+test('帳號：改名字', async ({ page }) => {
+  let sent: unknown
+  await page.route('**/api/auth/profile', (r) => {
+    sent = r.request().postDataJSON()
+    return r.fulfill({ json: { user: { ...testUser, name: '小明' } } })
+  })
+  await page.goto('./#/')
+  await page.getByRole('button', { name: '帳號' }).click()
+  const sheet = page.getByRole('dialog', { name: '帳號' })
+  await sheet.getByRole('button', { name: '改名字' }).click()
+  await sheet.getByRole('textbox', { name: '名字' }).fill('小明')
+  await sheet.getByRole('button', { name: '儲存' }).click()
+  await expect(sheet.getByText('目前登入：小明')).toBeVisible()
+  expect(sent).toEqual({ name: '小明' })
 })
 
 test('登出：清掉這支手機上存的行程與對話，回到登入畫面', async ({ page }) => {

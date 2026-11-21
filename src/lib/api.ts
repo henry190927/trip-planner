@@ -78,13 +78,16 @@ export interface Account {
 export const fetchMe = () => request<{ user: Account }>('/api/me', { cache: 'no-store' })
 export const loginOptions = () => post<{ options: unknown; challengeId: string }>('/api/auth/login/options')
 export const loginVerify = (challengeId: string, response: unknown) => post<{ user: Account }>('/api/auth/login/verify', { challengeId, response })
-export const inviteInfo = (code: string) => post<{ name: string; newDevice: boolean }>('/api/auth/invite/info', { code })
-export const inviteOptions = (code: string) => post<{ options: unknown; challengeId: string }>('/api/auth/invite/options', { code })
+export const inviteInfo = (code: string) => post<{ name?: string; newDevice: boolean }>('/api/auth/invite/info', { code })
+/** name：新旅伴自己填的名字（加新裝置時不用） */
+export const inviteOptions = (code: string, name?: string) =>
+  post<{ options: unknown; challengeId: string }>('/api/auth/invite/options', { code, ...(name && { name }) })
 export const inviteVerify = (code: string, challengeId: string, response: unknown) =>
   post<{ user: Account }>('/api/auth/invite/verify', { code, challengeId, response })
 export const logout = () => post<{ ok: true }>('/api/auth/logout')
-/** 沒帶 name：給自己的新裝置；帶 name：邀請新旅伴 */
-export const createInvite = (name?: string) => post<{ code: string; expiresAt: string }>('/api/auth/invites', name ? { name } : {})
+/** device：給自己的新裝置；person：邀請新旅伴（名字由對方加入時自己填） */
+export const createInvite = (kind: 'device' | 'person') => post<{ code: string; expiresAt: string }>('/api/auth/invites', { for: kind })
+export const rename = (name: string) => post<{ user: Account }>('/api/auth/profile', { name })
 export const removeCredential = (id: string) => post<{ ok: true }>('/api/auth/credentials/remove', { id })
 
 export interface Versioned {

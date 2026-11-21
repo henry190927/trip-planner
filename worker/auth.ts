@@ -63,9 +63,10 @@ interface Session {
 }
 
 export interface Invite {
-  /** 有值：替這個人加一台新裝置；沒有：邀請一位新旅伴 */
+  /** 有值：替這個人加一台新裝置；沒有：邀請一位新旅伴（名字由對方加入時自己填） */
   userId?: string
-  name: string
+  /** 加新裝置時是那個人的名字；邀請新旅伴時是建議的名字（可以不給） */
+  name?: string
   createdAt: string
 }
 
@@ -75,6 +76,8 @@ interface Challenge {
   inviteHash?: string
   /** 建立 passkey 時寫進 passkey 的帳號 id，新帳號就用這個 */
   userId?: string
+  /** 新帳號的名字 */
+  name?: string
 }
 
 export class AuthError extends Error {
@@ -102,6 +105,16 @@ const toB64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
 const fromB64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
+
+export const NAME_MAX = 20
+
+/** 顯示名稱：去掉前後空白與控制字元，1～20 個字 */
+export function cleanName(name: unknown) {
+  const text = typeof name === 'string' ? [...name].filter((c) => c.charCodeAt(0) >= 32 && c !== '\u007f').join('').trim() : ''
+  if (!text) throw new AuthError(400, '請輸入名字')
+  if ([...text].length > NAME_MAX) throw new AuthError(400, `名字最多 ${NAME_MAX} 個字`)
+  return text
+}
 
 /** passkey 綁定網站的網域；用請求本身的網址，開發（localhost）和正式網址都適用 */
 export function relyingParty(req: Request) {
@@ -248,27 +261,29 @@ async function readInvite(env: Env, code: unknown) {
 
 export async function inviteInfo(env: Env, code: unknown) {
   const { invite } = await readInvite(env, code)
-  return { name: invite.name, newDevice: !!invite.userId }
+  return { ...(invite.name && { name: invite.name }), newDevice: !!invite.userId }
 }
 
-export async function registerOptions(req: Request, env: Env, code: unknown) {
+/** 建立 passkey 的選項。新旅伴要帶自己填的名字；加新裝置沿用帳號原本的名字 */
+export async function registerOptions(req: Request, env: Env, code: unknown, name?: unknown) {
   const { invite, hash } = await readInvite(env, code)
   const user = invite.userId ? await getUser(env, invite.userId) : undefined
   if (invite.userId && !user) throw new AuthError(410, '這個帳號已經不存在')
+  const displayName = user ? user.name : cleanName(name)
   const { rpID } = relyingParty(req)
   const userId = user?.id ?? randomToken(12)
   const options = await generateRegistrationOptions({
     rpName: '旅行手帖',
     rpID,
-    userName: invite.name,
-    userDisplayName: invite.name,
+    userName: displayName,
+    userDisplayName: displayName,
     userID: new Uint8Array(enc.encode(userId)),
     attestationType: 'none',
     // 同一台裝置不要重複建立
     excludeCredentials: (user?.credentials ?? []).map((c) => ({ id: c.id })),
     authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
   })
-  const challengeId = await saveChallenge(env, { challenge: options.challenge, kind: 'register', inviteHash: hash, userId })
+  const challengeId = await saveChallenge(env, { challenge: options.challenge, kind: 'register', inviteHash: hash, userId, name: displayName })
   return { options, challengeId }
 }
 
@@ -295,7 +310,13 @@ export async function registerVerify(
   const now = new Date().toISOString()
   const existing = invite.userId ? await getUser(env, invite.userId) : undefined
   if (invite.userId && !existing) throw new AuthError(410, '這個帳號已經不存在')
-  const user: User = existing ?? { id: challenge.userId ?? randomToken(12), name: invite.name, createdAt: now, credentials: [], sessions: [] }
+  const user: User = existing ?? {
+    id: challenge.userId ?? randomToken(12),
+    name: cleanName(challenge.name),
+    createdAt: now,
+    credentials: [],
+    sessions: [],
+  }
   if (user.credentials.some((c) => c.id === credential.id)) throw new AuthError(409, '這台裝置已經加入過了')
   // 邀請用一次就失效
   await env.TRIPS.delete(`invite:${hash}`)
@@ -324,6 +345,12 @@ export async function removeCredential(env: Env, user: User, credentialId: unkno
     credentials: user.credentials.filter((c) => c.id !== credentialId),
     sessions: user.sessions.filter((s) => s.credentialId !== credentialId),
   })
+}
+
+export async function renameUser(env: Env, user: User, name: unknown) {
+  const next = { ...user, name: cleanName(name) }
+  await saveUser(env, next)
+  return next
 }
 
 /** 給網站看的帳號資料（不含 session 雜湊） */

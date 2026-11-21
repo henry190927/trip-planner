@@ -14,6 +14,7 @@ import {
   registerOptions,
   registerVerify,
   removeCredential,
+  renameUser,
   sameOrigin,
   sessionCookie,
   type User,
@@ -32,8 +33,9 @@ export { GeminiRelay } from './relay-object'
 //   POST /api/auth/login/options|verify   用 passkey 登入
 //   POST /api/auth/invite/info|options|verify  用邀請連結建立 passkey（新旅伴或新裝置）
 //   POST /api/auth/logout
-//   POST /api/auth/invites                產生邀請連結（給自己的新裝置，或帶 name 邀請新旅伴）
+//   POST /api/auth/invites                產生邀請連結：{ for: 'device' } 給自己的新裝置、{ for: 'person' } 邀請新旅伴
 //   POST /api/auth/credentials/remove     刪掉一台裝置的 passkey
+//   POST /api/auth/profile                改自己的名字
 //   GET  /api/trips                       所有行程的最新版本
 //   POST /api/chat                        和小樹聊天（SSE 串流）
 //   POST /api/trips/:id/apply             套用修改
@@ -127,8 +129,10 @@ async function authRoutes(req: Request, env: Env, path: string): Promise<Respons
     }
     case '/api/auth/invite/info':
       return json(await inviteInfo(env, (await readBody<{ code?: unknown }>(req)).code))
-    case '/api/auth/invite/options':
-      return json(await registerOptions(req, env, (await readBody<{ code?: unknown }>(req)).code))
+    case '/api/auth/invite/options': {
+      const body = await readBody<{ code?: unknown; name?: unknown }>(req)
+      return json(await registerOptions(req, env, body.code, body.name))
+    }
     case '/api/auth/invite/verify': {
       const body = await readBody<{ code?: unknown; challengeId?: unknown; response?: RegistrationResponseJSON }>(req)
       const { user, setCookie } = await registerVerify(req, env, body)
@@ -152,11 +156,15 @@ async function signedInRoutes(req: Request, env: Env, path: string, user: User, 
   if (req.method !== 'POST') return json({ error: 'Not found' }, 404)
 
   if (path === '/api/auth/invites') {
-    const body = await readBody<{ name?: unknown }>(req)
-    // 帶 name：邀請新旅伴；沒帶：給自己的新裝置
-    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 20) : ''
-    const invite = name ? { name, createdAt: new Date().toISOString() } : { userId: user.id, name: user.name, createdAt: new Date().toISOString() }
+    const body = await readBody<{ for?: unknown }>(req)
+    const createdAt = new Date().toISOString()
+    // 新旅伴的名字由對方加入時自己填
+    const invite = body.for === 'person' ? { createdAt } : { userId: user.id, name: user.name, createdAt }
     return json(await createInvite(env, invite))
+  }
+  if (path === '/api/auth/profile') {
+    const next = await renameUser(env, user, (await readBody<{ name?: unknown }>(req)).name)
+    return json({ user: publicUser(next) })
   }
   if (path === '/api/auth/credentials/remove') {
     await removeCredential(env, user, (await readBody<{ id?: unknown }>(req)).id)

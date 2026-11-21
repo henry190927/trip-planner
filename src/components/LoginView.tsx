@@ -66,19 +66,28 @@ export function LoginView() {
 
 export function JoinView({ code }: { code: string }) {
   const join = useAuth((s) => s.join)
-  const [info, setInfo] = useState<{ name: string; newDevice: boolean }>()
+  const [info, setInfo] = useState<{ name?: string; newDevice: boolean }>()
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    inviteInfo(code).then(setInfo, (e: unknown) => setError(errorMessage(e)))
+    inviteInfo(code).then(
+      (i) => {
+        setInfo(i)
+        setName(i.name ?? '')
+      },
+      (e: unknown) => setError(errorMessage(e)),
+    )
   }, [code])
 
+  const needsName = info && !info.newDevice
   const run = async () => {
+    if (needsName && !name.trim()) return setError('請輸入名字')
     setBusy(true)
     setError('')
     try {
-      await join(code)
+      await join(code, needsName ? name.trim() : undefined)
       // 加入完成：回首頁，邀請碼不要留在網址上
       window.location.replace('#/')
     } catch (e) {
@@ -92,11 +101,25 @@ export function JoinView({ code }: { code: string }) {
     <Shell>
       {info ? (
         <>
-          <p className="mt-4 text-lg font-black">{info.newDevice ? `${info.name}，把這台裝置加進來` : `歡迎，${info.name}`}</p>
-          <p className="mt-2 max-w-72 text-sm leading-relaxed text-mute">
+          <p className="mt-4 text-lg font-black">{info.newDevice ? `${info.name}，把這台裝置加進來` : '歡迎加入'}</p>
+          {needsName && (
+            <label className="mt-4 block w-full max-w-72 text-left">
+              <span className="text-xs font-extrabold text-mute">你的名字</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={20}
+                autoComplete="nickname"
+                placeholder="旅伴看到的名字"
+                className="mt-1 w-full rounded-2xl border-2 border-butter bg-card px-4 py-2.5 text-center text-[16px] font-bold outline-none focus:border-sky"
+              />
+              <span className="mt-1 block text-[11px] text-mute">修改紀錄會顯示這個名字，之後可以在「帳號」裡改。</span>
+            </label>
+          )}
+          <p className="mt-4 max-w-72 text-sm leading-relaxed text-mute">
             按下面的按鈕，用 Face ID 或指紋建立 passkey。之後打開旅行手帖，用同樣的方式就能登入，不用記密碼。
           </p>
-          <PasskeyButton busy={busy} onClick={() => void run()}>
+          <PasskeyButton busy={busy || (!!needsName && !name.trim())} onClick={() => void run()}>
             建立 passkey
           </PasskeyButton>
         </>

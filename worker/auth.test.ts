@@ -3,6 +3,7 @@ import type { Env } from './env'
 import {
   AuthError,
   SESSION_COOKIE,
+  cleanName,
   createInvite,
   currentUser,
   deviceLabel,
@@ -10,6 +11,7 @@ import {
   loginVerify,
   registerOptions,
   removeCredential,
+  renameUser,
   sameOrigin,
   sha256,
   type User,
@@ -105,23 +107,46 @@ describe('刪掉裝置', () => {
 })
 
 describe('邀請連結', () => {
-  it('KV 只存雜湊，看得到是邀請誰；亂打或過期的連結不能用', async () => {
+  it('KV 只存雜湊；邀請新旅伴不預先指定名字；亂打或過期的連結不能用', async () => {
     const { env, kv } = fakeEnv()
-    const { code } = await createInvite(env, { name: '她', createdAt: '2026-11-21T00:00:00Z' })
+    const { code } = await createInvite(env, { createdAt: '2026-11-21T00:00:00Z' })
     expect(code.length).toBeGreaterThanOrEqual(40)
     expect([...kv.keys()].some((k) => k.includes(code))).toBe(false)
-    expect(await inviteInfo(env, code)).toEqual({ name: '她', newDevice: false })
+    expect(await inviteInfo(env, code)).toEqual({ newDevice: false })
+    const device = await createInvite(env, { userId: 'u1', name: '小明', createdAt: '2026-11-21T00:00:00Z' })
+    expect(await inviteInfo(env, device.code)).toEqual({ name: '小明', newDevice: true })
     await expect(inviteInfo(env, 'x'.repeat(43))).rejects.toMatchObject({ status: 410 })
     await expect(inviteInfo(env, 'short')).rejects.toMatchObject({ status: 400 })
   })
 
-  it('建立 passkey 的選項：要求裝置驗證（Face ID／指紋）、存在裝置上、綁這個網域', async () => {
+  it('建立 passkey 的選項：新旅伴自己填名字；要求裝置驗證（Face ID／指紋）、存在裝置上、綁這個網域', async () => {
     const { env } = fakeEnv()
-    const { code } = await createInvite(env, { name: '我', createdAt: '2026-11-21T00:00:00Z' })
-    const { options, challengeId } = await registerOptions(new Request(`${site}/api/auth/invite/options`), env, code)
+    const { code } = await createInvite(env, { createdAt: '2026-11-21T00:00:00Z' })
+    const req = new Request(`${site}/api/auth/invite/options`)
+    await expect(registerOptions(req, env, code)).rejects.toMatchObject({ status: 400, message: '請輸入名字' })
+    await expect(registerOptions(req, env, code, '   ')).rejects.toMatchObject({ status: 400 })
+    const { options, challengeId } = await registerOptions(req, env, code, '  小美 ')
+    expect(options.user).toMatchObject({ name: '小美', displayName: '小美' })
     expect(options.rp).toEqual({ name: '旅行手帖', id: 'trip.example.workers.dev' })
     expect(options.authenticatorSelection).toMatchObject({ residentKey: 'required', userVerification: 'required' })
     expect(challengeId.length).toBeGreaterThan(20)
+  })
+})
+
+describe('名字', () => {
+  it('去掉前後空白與控制字元，最多 20 個字', () => {
+    expect(cleanName('  小美\n ')).toBe('小美')
+    expect(cleanName('一'.repeat(20))).toBe('一'.repeat(20))
+    expect(() => cleanName('一'.repeat(21))).toThrow('最多 20 個字')
+    expect(() => cleanName(42)).toThrow('請輸入名字')
+  })
+
+  it('改名字只改自己的帳號', async () => {
+    const { env, kv } = fakeEnv()
+    const { user } = await signedIn(env)
+    const next = await renameUser(env, user, '小美')
+    expect(next.name).toBe('小美')
+    expect((JSON.parse(kv.get('user:u1')!) as User).name).toBe('小美')
   })
 })
 

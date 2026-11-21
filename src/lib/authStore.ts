@@ -16,7 +16,9 @@ interface AuthState {
   user?: api.Account
   check: () => Promise<void>
   login: () => Promise<void>
-  join: (code: string) => Promise<void>
+  /** name：新旅伴自己填的名字 */
+  join: (code: string, name?: string) => Promise<void>
+  rename: (name: string) => Promise<void>
   logout: () => Promise<void>
   /** 重新抓帳號資料（例如刪了裝置之後） */
   reload: () => Promise<void>
@@ -64,12 +66,17 @@ export const useAuth = create<AuthState>()((set, get) => {
       void useTrips.getState().refresh()
     },
 
-    join: async (code) => {
-      const { options, challengeId } = await api.inviteOptions(code)
+    join: async (code, name) => {
+      const { options, challengeId } = await api.inviteOptions(code, name)
       const response = await startRegistration({ optionsJSON: options as Parameters<typeof startRegistration>[0]['optionsJSON'] })
       const { user } = await api.inviteVerify(code, challengeId, response)
       set({ status: 'signedIn', user })
       void useTrips.getState().refresh()
+    },
+
+    rename: async (name) => {
+      const { user } = await api.rename(name)
+      set({ user })
     },
 
     logout: async () => {

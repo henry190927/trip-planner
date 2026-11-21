@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { Check, Copy, LoaderCircle, LogOut, Share, Smartphone, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, Copy, LoaderCircle, LogOut, Pencil, Share, Smartphone, Trash2, UserPlus, X } from 'lucide-react'
 import { createInvite, removeCredential } from '../lib/api'
 import { useAuth } from '../lib/authStore'
 import { relativeTime } from '../lib/dates'
 import { inviteUrl } from '../lib/router'
-import { Card, SectionTitle, gradient } from './ui'
+import { Card, SectionTitle } from './ui'
 
 const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -52,9 +52,9 @@ export default function AccountSheet({ open, onClose }: { open: boolean; onClose
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
   const reload = useAuth((s) => s.reload)
+  const rename = useAuth((s) => s.rename)
   const [invite, setInvite] = useState<{ url: string; kind: 'device' | 'person' }>()
-  const [newName, setNewName] = useState('')
-  const [askingName, setAskingName] = useState(false)
+  const [editingName, setEditingName] = useState<string>()
   const [confirmRemove, setConfirmRemove] = useState<string>()
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState('')
@@ -73,10 +73,8 @@ export default function AccountSheet({ open, onClose }: { open: boolean; onClose
 
   const makeInvite = (kind: 'device' | 'person') =>
     run(kind, async () => {
-      const { code } = await createInvite(kind === 'person' ? newName.trim() : undefined)
+      const { code } = await createInvite(kind)
       setInvite({ url: inviteUrl(code), kind })
-      setAskingName(false)
-      setNewName('')
     })
 
   return createPortal(
@@ -104,6 +102,47 @@ export default function AccountSheet({ open, onClose }: { open: boolean; onClose
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 pb-6">
+              <SectionTitle>名字</SectionTitle>
+              {editingName === undefined ? (
+                <Card className="flex items-center gap-3 py-3">
+                  <p className="min-w-0 flex-1 font-black">{user.name}</p>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(user.name)}
+                    aria-label="改名字"
+                    className="flex size-9 items-center justify-center rounded-full text-mute active:bg-cream"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                </Card>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void run('rename', async () => {
+                      await rename(editingName)
+                      setEditingName(undefined)
+                    })
+                  }}
+                  className="soft-shadow flex items-center gap-2 rounded-3xl bg-card px-3 py-2"
+                >
+                  <input
+                    autoFocus
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    maxLength={20}
+                    aria-label="名字"
+                    className="min-w-0 flex-1 rounded-xl border-2 border-butter bg-card px-3 py-1.5 text-[16px] outline-none focus:border-sky"
+                  />
+                  <button type="submit" disabled={!editingName.trim() || !!busy} className="rounded-full bg-sky/40 px-3 py-1.5 text-xs font-bold text-sky-ink disabled:opacity-50">
+                    {busy === 'rename' ? '儲存中…' : '儲存'}
+                  </button>
+                  <button type="button" onClick={() => setEditingName(undefined)} className="px-1 text-xs font-bold text-mute">
+                    取消
+                  </button>
+                </form>
+              )}
+
               <SectionTitle>我的裝置</SectionTitle>
               <Card className="divide-y-2 divide-cream p-0">
                 {user.credentials.map((c) => (
@@ -167,37 +206,15 @@ export default function AccountSheet({ open, onClose }: { open: boolean; onClose
                     {busy === 'device' ? <LoaderCircle className="size-5 animate-spin" /> : <Smartphone className="size-5 text-sky-ink" />}
                     加一台我自己的新裝置
                   </button>
-                  {askingName ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        if (newName.trim()) void makeInvite('person')
-                      }}
-                      className="soft-shadow flex items-center gap-2 rounded-2xl bg-card px-3 py-2"
-                    >
-                      <input
-                        autoFocus
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        maxLength={20}
-                        aria-label="新旅伴的名字"
-                        placeholder="新旅伴的名字"
-                        className="min-w-0 flex-1 rounded-xl border-2 border-butter bg-card px-3 py-1.5 text-[16px] outline-none focus:border-sky"
-                      />
-                      <button type="submit" disabled={!newName.trim() || !!busy} className={`rounded-full px-3 py-1.5 text-xs font-black ${gradient} disabled:opacity-50`}>
-                        {busy === 'person' ? '產生中…' : '產生連結'}
-                      </button>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAskingName(true)}
-                      className="soft-shadow flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left text-sm font-bold active:scale-[0.99]"
-                    >
-                      <UserPlus className="size-5 text-sky-ink" />
-                      邀請新旅伴
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() => void makeInvite('person')}
+                    className="soft-shadow flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left text-sm font-bold active:scale-[0.99]"
+                  >
+                    {busy === 'person' ? <LoaderCircle className="size-5 animate-spin" /> : <UserPlus className="size-5 text-sky-ink" />}
+                    邀請新旅伴
+                  </button>
                 </div>
               )}
 

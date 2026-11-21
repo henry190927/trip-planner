@@ -16,9 +16,9 @@ function kvPut(key: string, value: unknown) {
   })
 }
 
-function seedInvite(name: string) {
-  const code = `test-invite-${name === '我' ? 'me' : 'her'}-${Date.now()}-abcdefghijklmnop`
-  kvPut(`invite:${createHash('sha256').update(code).digest('hex')}`, { name, createdAt: new Date().toISOString() })
+function seedInvite() {
+  const code = `test-invite-${Date.now()}-abcdefghijklmnopqrstuvwxyz`
+  kvPut(`invite:${createHash('sha256').update(code).digest('hex')}`, { createdAt: new Date().toISOString() })
   return code
 }
 
@@ -46,11 +46,13 @@ test('沒登入時 API 什麼都拿不到', async ({ request }) => {
 
 test('邀請連結 → 建立 passkey → 看得到行程；登出後用 passkey 再登入；邀請連結用一次就失效', async ({ page, context }) => {
   await addAuthenticator(page)
-  const code = seedInvite('我')
+  const code = seedInvite()
   await page.goto(`/#/join/${code}`)
-  await expect(page.getByText('歡迎，我')).toBeVisible()
+  await expect(page.getByText('歡迎加入')).toBeVisible()
+  await page.getByRole('textbox', { name: '你的名字' }).fill('小美')
   await page.getByRole('button', { name: '建立 passkey' }).click()
   await expect(page.getByRole('heading', { name: '首爾' })).toBeVisible()
+  expect(((await (await page.request.get(`${site}/api/me`)).json()) as { user: { name: string } }).user.name).toBe('小美')
 
   // 登入狀態在 JavaScript 讀不到的 cookie 裡
   const cookie = (await context.cookies()).find((c) => c.name === '__Host-sid')
@@ -75,7 +77,7 @@ test('邀請連結 → 建立 passkey → 看得到行程；登出後用 passkey
   await page.getByRole('checkbox', { name: 'Papago 翻譯' }).click()
   await expect(page.getByRole('checkbox', { name: 'Papago 翻譯' })).toHaveAttribute('aria-checked', 'true')
   const trips = (await (await page.request.get(`${site}/api/trips`)).json()) as { trips: { log: { by?: string; summary: string }[] }[] }
-  await expect.poll(async () => ((await (await page.request.get(`${site}/api/trips`)).json()) as typeof trips).trips[0].log[0]).toMatchObject({ by: '我' })
+  await expect.poll(async () => ((await (await page.request.get(`${site}/api/trips`)).json()) as typeof trips).trips[0].log[0]).toMatchObject({ by: '小美' })
 })
 
 test('從別的網站送來的修改請求一律擋掉', async ({ request }) => {
