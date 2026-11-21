@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Check, ChevronRight, CircleUserRound, CloudOff } from 'lucide-react'
+import { Check, ChevronRight, CircleUserRound, CloudOff, Plus } from 'lucide-react'
 import { useAuth } from '../lib/authStore'
 import { useTripList, useTrips } from '../lib/tripStore'
 import { href } from '../lib/router'
@@ -9,6 +9,9 @@ import type { Trip } from '../types'
 import { Plane, TripIcon, TwoFriends } from './illustrations'
 import { gradient } from './ui'
 import AccountSheet from './AccountSheet'
+import ChatSheet from './ChatSheet'
+import { NEW_TRIP } from '../lib/api'
+import { useChat } from '../lib/chatStore'
 
 function phaseText(trip: Trip) {
   const phase = tripPhase(trip, nowIn(trip.timezone).date)
@@ -22,6 +25,7 @@ export default function TripList() {
   const status = useAuth((s) => s.status)
   const loading = useTrips((s) => s.status === 'loading' || s.status === 'idle')
   const [account, setAccount] = useState(false)
+  const ask = useChat((s) => s.ask)
   return (
     <div className="pt-safe mx-auto min-h-dvh max-w-lg px-4 pb-16">
       <div className="flex justify-end pt-3">
@@ -83,12 +87,23 @@ export default function TripList() {
           )
         })}
 
-        {trips.length === 0 && !loading && (
-          <div className="rounded-[2rem] border-2 border-dashed border-butter bg-cream/60 p-6 text-center">
-            <p className="font-black">還沒有行程</p>
-            <p className="mt-1 text-sm text-mute">新的行程建立好之後會出現在這裡。</p>
-          </div>
+        {status !== 'offline' && !loading && (
+          <motion.button
+            type="button"
+            onClick={() => ask(NEW_TRIP, '')}
+            whileTap={{ scale: 0.98 }}
+            className="flex w-full items-center gap-3 rounded-[2rem] border-2 border-dashed border-butter bg-cream/60 p-5 text-left"
+          >
+            <span className={`flex size-11 shrink-0 items-center justify-center rounded-full ${gradient}`}>
+              <Plus className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-black">{trips.length ? '用小樹建立新行程' : '建立第一趟旅行'}</span>
+              <span className="block text-sm text-mute">說目的地和日期，或丟機票、訂房的截圖</span>
+            </span>
+          </motion.button>
         )}
+        <ChatSheet floating={false} />
       </div>
       <AccountSheet open={account} onClose={() => setAccount(false)} />
     </div>

@@ -1,3 +1,4 @@
+import { EmptyAsk } from './InfoView'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Clock, LifeBuoy, Wallet } from 'lucide-react'
@@ -134,6 +135,7 @@ export default function RoutesView({ trip, focus }: { trip: Trip; focus?: string
       {trip.routes.map((r) => (
         <RouteCard key={r.id} route={r} trip={trip} highlighted={r.id === focus} />
       ))}
+      {!trip.routes.length && <EmptyAsk tripId={trip.id} what="交通指南" prompt="幫我整理機場到住宿、還有行程裡主要幾段的交通方式" />}
     </div>
   )
 }

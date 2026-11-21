@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { opsSchema } from '../src/schema'
 import { seoul2026 } from '../test/fixtures/seoul-2026-11'
 
 const trips = [seoul2026]
-import { checkAgentOps, linkKey, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, urlsIn, type ChatEvent } from './agent'
+import { checkAgentOps, linkKey, newOverlaps, normalizeOps, runAgent, searchDigest, transitLengthChanges, urlsIn, type ChatEvent, sensitiveData } from './agent'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
 
@@ -270,5 +271,44 @@ describe('transitLengthChanges', () => {
     expect(transitLengthChanges(before, stretched).join()).toContain('長度從 45 分變成 90 分')
     const moved = applyOps(before, [{ op: 'update_item', date: '2026-11-07', title: '弘大 → KBS Arena', changes: { time: '16:15' } }]).trip
     expect(transitLengthChanges(before, moved)).toEqual([])
+  })
+})
+
+describe('其他區塊的修改', () => {
+  it('只改起飛時間：from 裡模型沒填的 null 去掉，其他沿用；第一層的 null 代表刪除', () => {
+    const [op] = normalizeOps([
+      { op: 'update_flight', ref: 'XX101', flightChanges: { from: { time: '09:40', code: null, terminal: null }, cabin: null }, changes: {}, spotChanges: null },
+    ]) as Record<string, unknown>[]
+    expect(op).toEqual({ op: 'update_flight', ref: 'XX101', flightChanges: { from: { time: '09:40' }, cabin: null } })
+    expect(opsSchema.safeParse([op]).success).toBe(true)
+  })
+
+  it('新增的班機、住宿裡的 null 去掉', () => {
+    const [op] = normalizeOps([{ op: 'add_stay', stay: { place: { name: '民宿', local: null }, checkIn: '15:00', checkOut: '11:00', verify: null } }]) as Record<string, unknown>[]
+    expect(op.stay).toEqual({ place: { name: '民宿' }, checkIn: '15:00', checkOut: '11:00' })
+  })
+
+  it('住宿的地圖連結一樣只收使用者給的網址', () => {
+    const ops = [{ op: 'add_stay', stay: { place: { name: '民宿', mapLink: 'https://map.naver.com/made-up' }, checkIn: '15:00', checkOut: '11:00' } }]
+    const { notes } = checkAgentOps(ops, new Map())
+    expect(notes).toHaveLength(1)
+    expect((ops[0].stay.place as { mapLink?: string }).mapLink).toBeUndefined()
+  })
+})
+
+describe('不存的個資', () => {
+  it('護照號碼、身分證字號、信用卡號會被擋下', () => {
+    expect(sensitiveData([{ op: 'add_flight', flight: { notes: ['護照號碼 312345678'] } }])).toHaveLength(1)
+    expect(sensitiveData([{ notes: ['Passport No: A12345678'] }])[0]).toContain('護照號碼')
+    expect(sensitiveData([{ notes: ['A123456789'] }])[0]).toContain('身分證字號')
+    expect(sensitiveData([{ notes: ['卡號 4111 1111 1111 1111'] }])[0]).toContain('信用卡號')
+  })
+
+  it('訂位代號、電話、航班號碼、時間不會被誤擋', () => {
+    expect(
+      sensitiveData([
+        { notes: ['訂位代號 ABC123', '電話 010-1234-5678', '+82 51 123 4567', 'BR170 09:40 起飛', '訂單 1234 5678 9012 3456', '護照記得帶'] },
+      ]),
+    ).toEqual([])
   })
 })

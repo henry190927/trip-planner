@@ -22,7 +22,9 @@ import {
 import { imageError } from './images'
 import type { Env } from './env'
 import { GeminiError } from './gemini'
-import { loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
+import { blankTrip, newTripId } from '../src/lib/sectionOps'
+import { validateTrip } from '../src/lib/validate'
+import { createTrip, loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
 
 export { GeminiRelay } from './relay-object'
 
@@ -37,6 +39,7 @@ export { GeminiRelay } from './relay-object'
 //   POST /api/auth/credentials/remove     刪掉一台裝置的 passkey
 //   POST /api/auth/profile                改自己的名字
 //   GET  /api/trips                       所有行程的最新版本
+//   POST /api/trips                       建立新行程（小樹在空白草稿上提的修改）
 //   POST /api/chat                        和小樹聊天（SSE 串流）
 //   POST /api/trips/:id/apply             套用修改
 //   POST /api/trips/:id/undo              復原最新一次修改
@@ -68,13 +71,35 @@ function geminiMessage(e: unknown) {
   return `出錯了：${e instanceof Error ? e.message : String(e)}`
 }
 
+/** 所有帳號的名字（新行程的旅伴預設就是大家） */
+async function accountNames(env: Env) {
+  const { keys } = await env.TRIPS.list({ prefix: 'user:' })
+  const users = await Promise.all(keys.map((k) => env.TRIPS.get<{ name: string; createdAt: string }>(k.name, 'json')))
+  return users
+    .filter((u): u is { name: string; createdAt: string } => !!u)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((u) => u.name)
+}
+
+const todayInTaipei = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date())
+
+/** 新行程的空白草稿；聊天時和套用時各產生一次，所以只依賴帳號名字與日期 */
+const draftTrip = async (env: Env): Promise<Stored> => ({
+  version: 0,
+  updatedAt: new Date().toISOString(),
+  summary: '',
+  trip: blankTrip(await accountNames(env), todayInTaipei()),
+})
+
 async function chat(req: Request, env: Env) {
   const body = (await req.json().catch(() => null)) as {
     tripId?: string
+    newTrip?: boolean
     viewer?: string
     messages?: (ChatMessage & { images?: ChatImage[] })[]
   } | null
-  const stored = body?.tripId ? await loadTrip(env, body.tripId) : undefined
+  const creating = body?.newTrip === true
+  const stored = creating ? await draftTrip(env) : body?.tripId ? await loadTrip(env, body.tripId) : undefined
   if (!stored) return json({ error: '找不到這個行程' }, 404)
   const messages: ChatMessage[] = (body?.messages ?? [])
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
@@ -101,7 +126,7 @@ async function chat(req: Request, env: Env) {
     try {
       // 只認得行程裡的旅伴 id
       const viewer = stored.trip.travelers.some((t) => t.id === body?.viewer) ? body!.viewer : undefined
-      await runAgent(env, stored, messages, emit, viewer)
+      await runAgent(env, stored, messages, emit, viewer, creating ? 'create' : 'edit')
     } catch (e) {
       console.error(e)
       emit({ type: 'error', text: geminiMessage(e) })
@@ -154,6 +179,23 @@ async function signedInRoutes(req: Request, env: Env, path: string, user: User, 
   }
 
   if (req.method !== 'POST') return json({ error: 'Not found' }, 404)
+
+  if (path === '/api/trips') {
+    const body = await readBody<{ ops?: unknown; summary?: string; tripId?: unknown }>(req)
+    const parsed = opsSchema.safeParse(body.ops)
+    if (!parsed.success) return json({ error: '修改內容格式不對' }, 400)
+    const draft = await draftTrip(env)
+    const applied = applyOps(draft.trip, parsed.data)
+    if (applied.errors.length) return json({ error: '這份行程有問題', details: applied.errors }, 409)
+    const trip = { ...applied.trip, id: newTripId(body.tripId, applied.trip.startDate, await tripIds(env)) }
+    const errors = validateTrip(trip)
+    if (errors.length) return json({ error: '這份行程有問題', details: errors }, 409)
+    const created = await createTrip(env, trip, String(body.summary ?? `建立行程：${trip.title}`).slice(0, 200), {
+      changes: applied.changes,
+      by: user.name,
+    })
+    return json({ ...published(created), changes: applied.changes })
+  }
 
   if (path === '/api/auth/invites') {
     const body = await readBody<{ for?: unknown }>(req)

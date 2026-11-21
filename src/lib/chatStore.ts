@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { safeStorage, usePrefs } from './store'
-import { ApiError, applyManual, applyProposal, chat, undoLast, type Proposal, type Source } from './api'
+import { ApiError, NEW_TRIP, applyManual, applyProposal, chat, createTrip, undoLast, type Proposal, type Source } from './api'
 import { useTrips } from './tripStore'
 import type { PreparedImage } from './images'
 
@@ -127,6 +127,19 @@ export const useChat = create<ChatState>()(
             ?.proposals?.find((p) => p.proposal.id === proposalId)
           if (!target) return
           patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'applying', error: undefined }))
+          if (tripId === NEW_TRIP) {
+            try {
+              const created = await createTrip(target.proposal)
+              useTrips.getState().replace({ version: created.version, trip: created.trip, log: created.log })
+              usePrefs.getState().markSeen(created.trip.id, created.version)
+              // 建好了：這段對話清掉，直接打開新的行程
+              set((s) => ({ threads: { ...s.threads, [NEW_TRIP]: [] } }))
+              window.location.hash = `#/trip/${created.trip.id}`
+            } catch (e) {
+              patchProposal(tripId, messageId, proposalId, (p) => ({ ...p, state: 'failed', error: errorText(e) }))
+            }
+            return
+          }
           try {
             const result = await applyProposal(tripId, target.proposal)
             useTrips.getState().replace({ version: result.version, trip: result.trip, log: result.log })

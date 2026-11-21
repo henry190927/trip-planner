@@ -3,8 +3,9 @@ import { AlertTriangle, ChevronDown, ExternalLink, Plane } from 'lucide-react'
 import type { Flight, Trip } from '../types'
 import { formatDate } from '../lib/time'
 import { Card, Chip, MapButton, SectionTitle, Verify, gradient } from './ui'
-import { SleepyHouse, Suitcase } from './illustrations'
+import { SleepyHouse, Sprout, Suitcase } from './illustrations'
 import DriverCard from './DriverCard'
+import { useChat } from '../lib/chatStore'
 
 function FlightCard({ flight }: { flight: Flight }) {
   return (
@@ -48,6 +49,24 @@ function FlightCard({ flight }: { flight: Flight }) {
   )
 }
 
+/** 區塊還沒有資料時：說明可以請小樹加，按了會打開聊天框並先填好一句話 */
+export function EmptyAsk({ tripId, what, prompt }: { tripId: string; what: string; prompt: string }) {
+  const ask = useChat((s) => s.ask)
+  return (
+    <div className="rounded-3xl border-2 border-dashed border-butter bg-cream/50 px-4 py-4 text-sm">
+      <p className="font-bold text-mute">還沒有{what}的資料。</p>
+      <button
+        type="button"
+        onClick={() => ask(tripId, prompt)}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-bold active:scale-95"
+      >
+        <Sprout className="w-5" />
+        請小樹幫忙加
+      </button>
+    </div>
+  )
+}
+
 export default function InfoView({ trip }: { trip: Trip }) {
   // 新版瀏覽器的 scrollTo 會回傳 Promise，不能直接當 effect 的回傳值（React 會把它當成清理函式呼叫）
   useEffect(() => {
@@ -76,12 +95,14 @@ export default function InfoView({ trip }: { trip: Trip }) {
       <SectionTitle>航班</SectionTitle>
       <div className="space-y-4">
         {trip.flights.map((f) => (
-          <FlightCard key={f.number} flight={f} />
+          <FlightCard key={`${f.date}-${f.number}`} flight={f} />
         ))}
+        {!trip.flights.length && <EmptyAsk tripId={trip.id} what="航班" prompt="我把機票的截圖附上，幫我加進航班和行程" />}
       </div>
 
       <SectionTitle>住宿</SectionTitle>
       <div className="space-y-4">
+        {!trip.stays.length && <EmptyAsk tripId={trip.id} what="住宿" prompt="我把訂房確認的截圖附上，幫我加進住宿" />}
         {trip.stays.map((s) => (
           <Card key={s.place.name} className="relative overflow-hidden">
             <SleepyHouse className="absolute -right-2 -top-2 w-24" />

@@ -1,4 +1,4 @@
-import { itemKinds, opsSchema, spotCategories, triggers } from '../src/schema'
+import { itemKinds, mapProviders, opsSchema, scenes, spotCategories, tripIcons, triggers } from '../src/schema'
 import { applyOps, type Change, type Op } from '../src/lib/ops'
 import { freeWindows, overlaps } from '../src/lib/plan'
 import { hidePrivate } from '../src/lib/visibility'
@@ -23,7 +23,12 @@ export interface Proposal {
   ops: Op[]
   changes: Change[]
   baseVersion: number
+  /** 建立新行程的提案：套用時用這個 id 建立（伺服器會再檢查、重複時換一個） */
+  createTripId?: string
 }
+
+/** edit：改既有的行程；create：從空白草稿建立新行程 */
+export type AgentMode = 'edit' | 'create'
 
 export interface ChatImage {
   mimeType: string
@@ -111,6 +116,107 @@ const spotProps = {
   verify: str('還要確認的事'),
 }
 const nullable = (schema: object) => ({ ...schema, nullable: true })
+const strList = (description?: string) => ({ type: 'array', items: str(), ...(description && { description }) })
+const flightEnd = {
+  type: 'object',
+  properties: {
+    code: str('機場代碼，例如 TPE、PUS'),
+    name: str('機場名稱（繁中），例如「桃園」「金海」'),
+    terminal: str('航廈，例如 T1；不知道就寫「待確認」'),
+    time: str('HH:MM，當地時間'),
+    tzLabel: str('時區說明，例如「台灣時間」「韓國時間」'),
+  },
+  required: ['code', 'name', 'terminal', 'time', 'tzLabel'],
+}
+const flightProps = {
+  label: str('例如「去程」「回程」'),
+  date: str('YYYY-MM-DD，出發日'),
+  airline: str(),
+  number: str('航班號碼，例如 BR170'),
+  aircraft: str(),
+  cabin: str('艙等'),
+  duration: str('飛行時間，例如「2 小時 5 分」'),
+  from: flightEnd,
+  to: flightEnd,
+  notes: strList('補充，例如行李額度、報到櫃台；訂位代號可以寫在這裡'),
+}
+const stayProps = {
+  place: placeSchema,
+  checkIn: str('例如「12/22 15:00 後」'),
+  checkOut: str('例如「12/26 11:00 前」'),
+  notes: strList('補充，例如自助入住方式；訂位代號可以寫在這裡'),
+  verify: str('還要確認的事'),
+}
+const routeOption = {
+  type: 'object',
+  properties: {
+    label: str('方案名稱'),
+    mode: str('交通方式，例如「地鐵」「計程車」「機場巴士」'),
+    tab: str('分頁上的短名稱'),
+    recommended: { type: 'boolean', description: '推薦的方案；每條路線剛好一個' },
+    duration: str('例如「約 50 分」'),
+    cost: str('例如「₩1,500」'),
+    steps: strList('怎麼走，一步一個元素'),
+    pros: strList(),
+    cons: strList(),
+    verify: str(),
+  },
+  required: ['label', 'mode', 'duration', 'cost', 'steps'],
+}
+const routeProps = {
+  id: str('英文小寫與連字號，例如 airport-to-hotel；省略會自動產生'),
+  title: str('例如「金海機場 → 住宿」'),
+  who: { type: 'array', items: str(), description: '只有部分旅伴走這段時填旅伴 id' },
+  when: str('什麼時候走，例如「12/22 抵達後」'),
+  summary: str('一句話說明'),
+  options: { type: 'array', items: routeOption, description: '交通方案，至少一個，剛好一個 recommended' },
+  fallback: strList('出狀況時的備案'),
+}
+const tipProps = {
+  title: str(),
+  body: strList('內容，一段一個元素'),
+  level: { type: 'string', enum: ['info', 'warn'], description: 'warn 是要特別注意的' },
+  links: { type: 'array', items: { type: 'object', properties: { label: str(), url: str() }, required: ['label', 'url'] } },
+}
+const tripInfoProps = {
+  title: str('行程名稱，例如「釜山」'),
+  subtitle: str('副標題，例如「生日旅行」'),
+  icon: { type: 'string', enum: [...tripIcons], description: '首頁卡片的插圖' },
+  timezone: str('IANA 時區，例如 Asia/Seoul、Asia/Tokyo'),
+  mapProvider: { type: 'string', enum: [...mapProviders], description: '韓國用 naver、日本用 google' },
+  driverPhrase: str('給計程車司機看的那句話（當地語言），例如「이 주소로 가 주세요」'),
+}
+const travelerProps = { id: str('英文小寫；省略會自動產生'), name: str(), color: str('淺色底色，例如 #FFCCB8'), ink: str('文字色') }
+const changesOf = (props: Record<string, object>, description: string) => ({
+  type: 'object',
+  description,
+  properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, nullable(v)])),
+})
+
+/** 其他區塊的修改動作（基本資料、天數、旅伴、班機、住宿、交通、資訊、清單分組） */
+const sectionOpNames = [
+  'update_trip',
+  'set_dates',
+  'update_day',
+  'add_traveler',
+  'update_traveler',
+  'remove_traveler',
+  'add_flight',
+  'update_flight',
+  'remove_flight',
+  'add_stay',
+  'update_stay',
+  'remove_stay',
+  'add_route',
+  'update_route',
+  'remove_route',
+  'add_tip',
+  'update_tip',
+  'remove_tip',
+  'add_checklist_group',
+  'update_checklist_group',
+  'remove_checklist_group',
+]
 
 const tools = [
   {
@@ -153,6 +259,7 @@ const tools = [
           type: 'object',
           properties: {
             summary: str('一句話描述這次修改'),
+            tripId: str('只有建立新行程時填：英文小寫加連字號的 id，例如 busan-2026-12'),
             operations: {
               type: 'array',
               items: {
@@ -179,10 +286,11 @@ const tools = [
                       'use_alternative',
                       'shift_items',
                       'complete_task',
+                      ...sectionOpNames,
                     ],
                   },
-                  date: str('YYYY-MM-DD'),
-                  title: str('update_item / remove_item / *_alternative：目前項目的標題（要完全相同）'),
+                  date: str('YYYY-MM-DD；update_day 是要改的那一天'),
+                  title: str('update_item / remove_item / *_alternative：目前項目的標題（要完全相同）；add_checklist_group / update_checklist_group：分組名稱（update 時是新的名稱）'),
                   time: str('update_item / remove_item / *_alternative：同一天有同名項目時用目前的時間區分'),
                   alternative: { type: 'object', properties: alternativeProps, required: ['trigger', 'title'], description: 'add_alternative 的備案' },
                   index: { type: 'integer', description: 'remove_alternative / use_alternative：第幾個備案（從 0 開始）' },
@@ -206,12 +314,29 @@ const tools = [
                   label: str('add_checklist_item / update_checklist_item：清單項目文字（update 時是新的文字）'),
                   text: str('add_pending / remove_pending 的文字'),
                   spot: { type: 'object', properties: spotProps, required: ['place', 'category'], description: 'add_spot 的新地點（id 可省略）' },
-                  ref: str('update_spot / remove_spot：地點的 id、名稱或當地語言名稱；remove_checklist_item / update_checklist_item / check_checklist_item：清單項目的 id 或文字'),
+                  ref: str(
+                    '要改的那一筆：update_spot / remove_spot 是地點的 id、名稱或當地語言名稱；*_checklist_item 是清單項目的 id 或文字；*_flight 是航班號碼或標籤；*_stay 是住宿名稱；*_route 是路線 id 或標題；*_tip 是小提醒標題；*_traveler 是旅伴 id 或名字；*_checklist_group 是分組名稱',
+                  ),
                   spotChanges: {
                     type: 'object',
                     description: 'update_spot 要改的欄位；要刪掉某個欄位就給 null',
                     properties: Object.fromEntries(Object.entries(spotProps).map(([k, v]) => [k, nullable(v)])),
                   },
+                  tripChanges: changesOf(tripInfoProps, 'update_trip：要改的行程基本資料（日期用 set_dates）'),
+                  startDate: str('set_dates：YYYY-MM-DD'),
+                  endDate: str('set_dates：YYYY-MM-DD'),
+                  dayChanges: changesOf({ title: str('這一天的標題，例如「海雲台散步」'), scene: { type: 'string', enum: [...scenes], description: 'depart 出發・concert 活動・stroll 散步・home 回家' } }, 'update_day：要改的欄位'),
+                  traveler: { type: 'object', properties: travelerProps, required: ['name'], description: 'add_traveler 的新旅伴' },
+                  travelerChanges: changesOf(travelerProps, 'update_traveler：要改的欄位'),
+                  flight: { type: 'object', properties: flightProps, required: ['label', 'date', 'airline', 'number', 'duration', 'from', 'to'], description: 'add_flight 的新班機' },
+                  flightChanges: changesOf(flightProps, 'update_flight：要改的欄位；from / to 只給要改的部分（例如只給 time）'),
+                  stay: { type: 'object', properties: stayProps, required: ['place', 'checkIn', 'checkOut'], description: 'add_stay 的新住宿' },
+                  stayChanges: changesOf(stayProps, 'update_stay：要改的欄位；place 只給要改的部分'),
+                  route: { type: 'object', properties: routeProps, required: ['title', 'summary', 'options'], description: 'add_route 的新路線' },
+                  routeChanges: changesOf(routeProps, 'update_route：要改的欄位'),
+                  section: str('add_tip：資訊分頁的分組名稱（沒有會自動建立）；update_tip / remove_tip：不同分組有同樣標題時用來區分'),
+                  tip: { type: 'object', properties: tipProps, required: ['title', 'body'], description: 'add_tip 的新小提醒' },
+                  tipChanges: changesOf(tipProps, 'update_tip：要改的欄位'),
                 },
                 required: ['op'],
               },
@@ -228,9 +353,21 @@ function todayIn(timeZone: string) {
   return new Intl.DateTimeFormat('en-CA', { timeZone, dateStyle: 'short', timeStyle: 'short', hourCycle: 'h23' }).format(new Date())
 }
 
-function systemPrompt(trip: Trip, viewer?: string) {
+const createIntro = `你是「旅行手帖」的旅行小幫手「小樹」。使用者要建立一趟新的旅行。
+下面的「目前的行程資料」是一份空白草稿，你用 propose_changes 把它填好；使用者按「套用」時才會真的建立這趟旅行，之後就能在那趟旅行裡繼續改。
+
+# 建立新行程
+- 必要的資訊是目的地和出發、回來的日期；使用者沒說清楚就先問，不要猜日期。
+- 資訊夠了就呼叫 propose_changes，一次送出：update_trip（title 用目的地，例如「釜山」；subtitle 寫這趟的主題，例如「生日旅行」；timezone 用 IANA 名稱；mapProvider：韓國用 naver，日本和其他地方用 google；driverPhrase 用當地語言寫「請載我到這個地址」）、set_dates、每一天用 update_day 取個簡短的標題；並在 tripId 填英文小寫加連字號的 id（例如 busan-2026-12）。
+- 使用者有給班機或住宿資料（截圖、確認信、貼的文字）時一起加進去（見下面的規則）；還不知道的細節不要編，用 add_pending 記下還缺什麼（例如「回程班機」「住宿」）。
+- 可以順便建一份出發前的準備清單：先 add_checklist_group 建分組（例如「證件與錢」「App 與網路」），再 add_checklist_item 加項目；項目要符合目的地（例如韓國的 Naver Map、T-money）。
+- 旅伴已經依帳號建好了，使用者沒提就不要改。
+- 這是新行程，套用之前沒有任何資料會被蓋掉，不用擔心；不要提到「草稿」這個詞，說「行程」就好。
+`
+
+function systemPrompt(trip: Trip, viewer?: string, mode: AgentMode = 'edit') {
   const me = viewer ? trip.travelers.find((t) => t.id === viewer) : undefined
-  return `你是「旅行手帖」的旅行小幫手「小樹」，幫一對旅伴規劃與調整這趟旅程。
+  return `${mode === 'create' ? createIntro : '你是「旅行手帖」的旅行小幫手「小樹」，幫一對旅伴規劃與調整這趟旅程。\n'}
 
 # 什麼時候上網搜尋
 - 先看下面的行程資料與地點清單，能直接回答就直接回答，不要搜尋。
@@ -269,6 +406,9 @@ function systemPrompt(trip: Trip, viewer?: string) {
 - 算空檔、來不來得及時先呼叫 find_free_time，不要自己做時間加減。
 - 小任務是某個人要順手完成的事（例如先外帶宵夜回住宿）：kind 用 task，todo 填 { done: false }，who 填負責人，time–end 是可以做的時間範圍，for 寫是為了哪個行程。調整行程時看到可以順路處理的事，可以提議建立小任務。
 - 驚喜類的小任務設 private: true，只有負責人看得到；建立私人小任務時，回答也不要寫出會被另一個人看到的細節。標成完成用 complete_task。
+- 除了每天的行程項目，你也可以改這趟旅程的其他區塊，各有新增／修改／刪除：基本資料（update_trip：名稱、時區、地圖 App、給司機看的那句話）、旅程日期（set_dates）、每天的標題與插圖（update_day）、旅伴（*_traveler）、班機（*_flight）、住宿（*_stay）、交通指南（*_route）、資訊分頁的小提醒（*_tip，依 section 分組）、清單分組（*_checklist_group）。
+- 使用者給了班機、住宿的資料（訂位確認信、截圖、貼的文字）時：用 add_flight / add_stay 填進對應區塊，同時把班機排進那一天的行程（kind: flight、fixed: true，title 寫「航班號碼 出發地 → 目的地」），入住、退房也排進行程；地址有當地語言的話填 place.addressLocal（給司機看的卡片會用）。看不清楚的欄位寫「待確認」或放進 verify，不要猜。
+- 訂位代號可以記在班機或住宿的 notes。護照號碼、身分證號碼、信用卡號一律不要存，回答裡也不要複述；截圖裡有的話直接略過（系統也會擋下）。
 - 換成備案就是狀態交換：換上來的就是行程，被換掉的變成備案（original 為 true 的是「原本排的」），換回去也是 use_alternative，不想要了可以 remove_alternative。usedAlternative 只是系統內部記錄，回答時不用提。
 
 # 目前的行程資料（JSON）
@@ -282,20 +422,35 @@ const stripNulls = (value: unknown): unknown =>
       ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null).map(([k, v]) => [k, stripNulls(v)]))
       : value
 
-/** 模型給的動作先整理再驗證：新項目、新地點的 null 欄位去掉（changes、spotChanges 裡的 null 代表刪除，保留） */
+/** 「要改的欄位」各自屬於哪個動作；模型常把不相干的空物件也一起送來 */
+const changesFor: Record<string, string> = {
+  changes: 'update_item',
+  spotChanges: 'update_spot',
+  tripChanges: 'update_trip',
+  dayChanges: 'update_day',
+  travelerChanges: 'update_traveler',
+  flightChanges: 'update_flight',
+  stayChanges: 'update_stay',
+  routeChanges: 'update_route',
+  tipChanges: 'update_tip',
+}
+/** 新增的那一筆（裡面的 null 都是模型沒填，直接去掉） */
+const newEntities = ['item', 'spot', 'alternative', 'traveler', 'flight', 'stay', 'route', 'tip']
+
+/**
+ * 模型給的動作先整理再驗證：新增的那一筆裡的 null 欄位去掉；
+ * 「要改的欄位」第一層的 null 代表刪除、保留，更深一層（例如只改起飛時間的 from）的 null 去掉
+ */
 export function normalizeOps(raw: unknown) {
   if (!Array.isArray(raw)) return raw
   return raw.map((op) => {
     if (!op || typeof op !== 'object') return op
     const o = op as Record<string, unknown>
-    const kept = Object.fromEntries(
-      Object.entries(o).filter(
-        ([k, v]) => v !== null && v !== '' && (k !== 'changes' || o.op === 'update_item') && (k !== 'spotChanges' || o.op === 'update_spot'),
-      ),
-    )
-    if (kept.item) kept.item = stripNulls(kept.item)
-    if (kept.spot) kept.spot = stripNulls(kept.spot)
-    if (kept.alternative) kept.alternative = stripNulls(kept.alternative)
+    const kept = Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== null && v !== '' && (!(k in changesFor) || changesFor[k] === o.op)))
+    for (const k of newEntities) if (kept[k]) kept[k] = stripNulls(kept[k])
+    for (const k of Object.keys(changesFor))
+      if (kept[k] && typeof kept[k] === 'object')
+        kept[k] = Object.fromEntries(Object.entries(kept[k] as object).map(([f, v]) => [f, v && typeof v === 'object' && !Array.isArray(v) ? stripNulls(v) : v]))
     return kept
   })
 }
@@ -340,9 +495,31 @@ export function checkAgentOps(raw: unknown, allowedLinks: Map<string, string>) {
     for (const op of raw as Record<string, Record<string, unknown> | undefined>[]) {
       if (!op || typeof op !== 'object') continue
       if (op.op === ('add_spot' as unknown) && op.spot && !op.spot.area) problems.push(`add_spot「${String((op.spot.place as { name?: string })?.name ?? '')}」要填 area（沿用清單裡已經有的地區叫法）`)
-      for (const holder of [op.spot, op.item, op.alternative, op.changes, op.spotChanges]) if (holder) stripLink(holder.place)
+      for (const holder of [op.spot, op.item, op.alternative, op.changes, op.spotChanges, op.stay, op.stayChanges]) if (holder) stripLink(holder.place)
     }
+  problems.push(...sensitiveData(raw))
   return { problems, notes }
+}
+
+/** 信用卡號的檢查碼（Luhn），排除剛好 16 位數的電話或訂單編號 */
+function luhn(digits: string) {
+  let sum = 0
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i])
+    if (i % 2) d = d * 2 > 9 ? d * 2 - 9 : d * 2
+    sum += d
+  }
+  return sum % 10 === 0
+}
+
+/** 不存的個資：護照號碼、台灣身分證字號、信用卡號（行程大家都看得到，外洩的代價也大） */
+export function sensitiveData(raw: unknown) {
+  const text = JSON.stringify(raw ?? '')
+  const found: string[] = []
+  if (/護照(?:號碼|號)?[^\d\w]{0,6}[A-Z0-9]{6,9}/i.test(text) || /passport\s*(?:no\.?|number)?\s*[:：]?\s*[A-Z0-9]{6,9}/i.test(text)) found.push('護照號碼')
+  if (/(?<![A-Za-z0-9])[A-Z][12]\d{8}(?!\d)/.test(text)) found.push('身分證字號')
+  for (const m of text.matchAll(/(?<!\d)(?:\d{4}[ -]?){3}\d{4}(?!\d)/g)) if (luhn(m[0].replace(/\D/g, ''))) found.push('信用卡號')
+  return [...new Set(found)].map((what) => `修改內容裡有${what}，這類個資不能存進行程；把它拿掉再送一次（訂位代號可以保留）`)
 }
 
 /** 這次修改新造成的時間重疊（原本就有的不算，免得被舊資料卡住） */
@@ -393,7 +570,14 @@ export function urlsIn(text: string) {
 
 const busy = (e: unknown) => e instanceof GeminiError && (e.status === 503 || e.status === 429)
 
-export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[], emit: (e: ChatEvent) => void, viewer?: string) {
+export async function runAgent(
+  env: Env,
+  stored: Stored,
+  messages: ChatMessage[],
+  emit: (e: ChatEvent) => void,
+  viewer?: string,
+  mode: AgentMode = 'edit',
+) {
   // 別人的私人小任務不給模型看，免得說溜嘴；修改還是套在完整的行程上
   const visible = hidePrivate(stored.trip, viewer)
   const contents: Content[] = messages.map((m) => ({
@@ -403,7 +587,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
   const searched: SearchResult[] = []
   const onRetry = () => emit({ type: 'status', text: '小樹那邊有點塞，再試一次…' })
   // 系統提示含整份行程，只產生一次（每一步都重新產生很吃 CPU）
-  const prompt = systemPrompt(visible, viewer)
+  const prompt = systemPrompt(visible, viewer, mode)
   // 可以用的地圖連結：使用者貼的、搜尋結果裡出現過的
   const allowedLinks = new Map(
     messages.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)).map((u) => [linkKey(u), u] as const),
@@ -517,6 +701,7 @@ export async function runAgent(env: Env, stored: Stored, messages: ChatMessage[]
                 ops: parsed.data,
                 changes: applied.changes,
                 baseVersion: stored.version,
+                ...(mode === 'create' && { createTripId: typeof args.tripId === 'string' ? args.tripId : '' }),
               },
             })
             proposals += 1

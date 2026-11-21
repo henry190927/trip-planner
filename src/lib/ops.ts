@@ -5,6 +5,7 @@ import { triggerLabels } from './triggers'
 import { makeRoom, shiftItems } from './plan'
 import { formatDate } from './dates'
 import { validateTrip } from './validate'
+import { applySectionOp, type SectionOp } from './sectionOps'
 
 export type Op = z.infer<typeof opSchema>
 
@@ -446,6 +447,9 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         changes.push({ kind: 'remove', text: `地點清單：${spot.place.name}` })
         break
       }
+      default:
+        // 基本資料、天數、旅伴、班機、住宿、交通、資訊、清單分組
+        applySectionOp(trip, op as SectionOp, changes, errors)
     }
   }
 

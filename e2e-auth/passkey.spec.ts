@@ -78,6 +78,24 @@ test('邀請連結 → 建立 passkey → 看得到行程；登出後用 passkey
   await expect(page.getByRole('checkbox', { name: 'Papago 翻譯' })).toHaveAttribute('aria-checked', 'true')
   const trips = (await (await page.request.get(`${site}/api/trips`)).json()) as { trips: { log: { by?: string; summary: string }[] }[] }
   await expect.poll(async () => ((await (await page.request.get(`${site}/api/trips`)).json()) as typeof trips).trips[0].log[0]).toMatchObject({ by: '小美' })
+
+  // 建立新行程（小樹在空白草稿上提的修改，這裡直接送）
+  const ops = [
+    { op: 'update_trip', tripChanges: { title: '釜山', subtitle: '生日旅行', timezone: 'Asia/Seoul', mapProvider: 'naver' } },
+    { op: 'set_dates', startDate: '2026-12-22', endDate: '2026-12-26' },
+  ]
+  const bad = await page.request.post(`${site}/api/trips`, { headers: { origin: site }, data: { ops: [{ op: 'set_dates', startDate: '2026-12-26', endDate: '2026-12-22' }] } })
+  expect(bad.status()).toBe(409)
+  const created = await page.request.post(`${site}/api/trips`, { headers: { origin: site }, data: { ops, summary: '建立釜山行程', tripId: 'busan-2026-12' } })
+  expect(created.status()).toBe(200)
+  // 同樣的 id 再建一次會自動換一個，不會蓋掉
+  const duplicate = await page.request.post(`${site}/api/trips`, { headers: { origin: site }, data: { ops, tripId: 'busan-2026-12' } })
+  expect(((await duplicate.json()) as { trip: { id: string } }).trip.id).toBe('busan-2026-12-2')
+  const all = ((await (await page.request.get(`${site}/api/trips`)).json()) as { trips: { trip: { id: string; travelers: { name: string }[]; days: unknown[] }; log: { by?: string }[] }[] }).trips
+  const busan = all.find((t) => t.trip.id === 'busan-2026-12')!
+  expect(busan.trip.days).toHaveLength(5)
+  expect(busan.trip.travelers.map((t) => t.name)).toEqual(['小美'])
+  expect(busan.log[0]).toMatchObject({ by: '小美' })
 })
 
 test('從別的網站送來的修改請求一律擋掉', async ({ request }) => {

@@ -5,6 +5,13 @@ import type { Trip } from '../types'
 export function integrityErrors(trip: Trip): string[] {
   const errors: string[] = []
 
+  try {
+    Intl.DateTimeFormat('en', { timeZone: trip.timezone }).format(0)
+  } catch {
+    errors.push(`時區「${trip.timezone}」不正確，請用 IANA 名稱（例如 Asia/Seoul）`)
+  }
+  const travelerNames = trip.travelers.map((t) => t.id)
+  if (new Set(travelerNames).size !== travelerNames.length) errors.push('旅伴 id 重複')
   if (trip.days[0]?.date !== trip.startDate) errors.push(`第一天應該是 ${trip.startDate}`)
   if (trip.days.at(-1)?.date !== trip.endDate) errors.push(`最後一天應該是 ${trip.endDate}`)
   const dates = trip.days.map((d) => d.date)

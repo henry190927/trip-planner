@@ -9,6 +9,7 @@ import { MAX_IMAGES, prepareImage, type PreparedImage } from '../lib/images'
 import { quickActions } from '../lib/quickActions'
 import { usePrefs } from '../lib/store'
 import { useNow } from '../lib/time'
+import { NEW_TRIP } from '../lib/api'
 import RichText from './RichText'
 import UndoButton from './UndoButton'
 import { useTrips } from '../lib/tripStore'
@@ -205,7 +206,14 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
   )
 }
 
-export default function ChatSheet({ trip }: { trip: Trip }) {
+const createSuggestions = ['12/22–12/26 去釜山玩，幫她慶生，幫我建立行程', '我附上機票和訂房的截圖，幫我建立行程']
+
+/**
+ * 小樹的聊天框。有 trip：改那趟行程；沒有：建立新行程（對話存在 NEW_TRIP 底下）。
+ * floating：右下角浮動的小樹按鈕；不要的話由其他按鈕用 useChat 的 ask 打開
+ */
+export default function ChatSheet({ trip, floating = true }: { trip?: Trip; floating?: boolean }) {
+  const key = trip?.id ?? NEW_TRIP
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   // 使用者是不是停在聊天的最底部（捲動邏輯見下面）
@@ -213,22 +221,22 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
   // 其他頁面請聊天框打開、先填好一句話
   const draft = useChat((s) => s.draft)
   const [handledDraft, setHandledDraft] = useState(draft?.n)
-  if (draft && draft.n !== handledDraft && draft.tripId === trip.id) {
+  if (draft && draft.n !== handledDraft && draft.tripId === key) {
     setHandledDraft(draft.n)
     setPinned(true)
     setOpen(true)
     setInput(draft.text)
   }
-  const messages = useChat((s) => s.threads[trip.id]) ?? []
+  const messages = useChat((s) => s.threads[key]) ?? []
   const busy = useChat((s) => s.busy)
   const send = useChat((s) => s.send)
   const stop = useChat((s) => s.stop)
   const clear = useChat((s) => s.clear)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const now = useNow(trip.timezone)
-  const viewer = usePrefs((s) => s.viewer[trip.id])
-  const actions = quickActions(trip, now, viewer)
+  const now = useNow(trip?.timezone ?? 'Asia/Taipei')
+  const viewer = usePrefs((s) => (trip ? s.viewer[trip.id] : undefined))
+  const actions = trip ? quickActions(trip, now, viewer) : []
   const [attachments, setAttachments] = useState<PreparedImage[]>([])
   const [preparing, setPreparing] = useState(false)
   const [attachError, setAttachError] = useState('')
@@ -303,18 +311,21 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
     setAttachError('')
     // 自己送出時一律回到底部，才看得到回覆
     setPinned(true)
-    void send(trip.id, t, attachments)
+    void send(key, t, attachments)
+  }
+
+  const openSheet = () => {
+    setPinned(true)
+    setOpen(true)
   }
 
   return (
     <>
+      {floating && (
       <motion.button
         type="button"
         aria-label="打開旅行小幫手"
-        onClick={() => {
-          setPinned(true)
-          setOpen(true)
-        }}
+        onClick={openSheet}
         whileTap={{ scale: 0.9 }}
         className={`soft-shadow fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-[max(1rem,calc(50%-var(--frame)/2+1rem))] z-30 flex size-14 items-center justify-center rounded-full ${gradient}`}
       >
@@ -323,6 +334,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
           <Sparkle x={12} y={12} r={9} fill="#FFE8C4" />
         </svg>
       </motion.button>
+      )}
 
       <AnimatePresence>
         {open && (
@@ -351,13 +363,13 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                 <MiniSprout />
                 <div className="min-w-0 flex-1">
                   <p className="font-black leading-tight">小樹</p>
-                  <p className="text-[11px] font-bold text-mute">會上網查資料・改行程前先問你</p>
+                  <p className="text-[11px] font-bold text-mute">{trip ? '會上網查資料・改行程前先問你' : '建立新行程'}</p>
                 </div>
                 {messages.length > 0 && !busy && (
                   <CopyButton text={() => conversationText(messages)} label="複製整段對話" className="size-9 justify-center bg-cream text-ink" iconOnly />
                 )}
                 {messages.length > 0 && !busy && (
-                  <button type="button" onClick={() => clear(trip.id)} aria-label="清除對話" className="flex size-9 items-center justify-center rounded-full bg-cream">
+                  <button type="button" onClick={() => clear(key)} aria-label="清除對話" className="flex size-9 items-center justify-center rounded-full bg-cream">
                     <Trash2 className="size-4" />
                   </button>
                 )}
@@ -372,10 +384,12 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                     {messages.length === 0 && (
                       <div className="flex flex-col items-center pt-4 text-center">
                         <Sprout className="w-28" />
-                        <p className="mt-2 text-lg font-black">嗨！我是小樹</p>
-                        <p className="mt-1 text-sm text-mute">想加什麼行程、查什麼資料，都可以問我。</p>
+                        <p className="mt-2 text-lg font-black">{trip ? '嗨！我是小樹' : '一起規劃新的旅行'}</p>
+                        <p className="mt-1 text-sm text-mute">
+                          {trip ? '想加什麼行程、查什麼資料，都可以問我。' : '告訴我目的地和日期；有機票或訂房的截圖，也可以直接附上。'}
+                        </p>
                         <div className="mt-5 flex flex-col gap-2">
-                          {suggestionsFor(trip).map((s) => (
+                          {(trip ? suggestionsFor(trip) : createSuggestions).map((s) => (
                             <button
                               key={s}
                               type="button"
@@ -389,7 +403,7 @@ export default function ChatSheet({ trip }: { trip: Trip }) {
                       </div>
                     )}
                     {messages.map((m) => (
-                      <Bubble key={m.id} m={m} tripId={trip.id} />
+                      <Bubble key={m.id} m={m} tripId={key} />
                     ))}
                   </div>
                   <AnimatePresence>

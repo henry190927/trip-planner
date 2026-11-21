@@ -41,7 +41,7 @@ export const tripIds = async (env: Env) => (await env.TRIPS.get<string[]>(INDEX_
 export const loadTrip = async (env: Env, id: string) => (await env.TRIPS.get<Stored>(key(id), 'json')) ?? undefined
 
 /** 建立新行程（第 1 版），並加進行程清單；已經有同 id 的就拒絕，免得蓋掉線上的修改 */
-export async function createTrip(env: Env, trip: Trip, summary: string) {
+export async function createTrip(env: Env, trip: Trip, summary: string, options: { changes?: Change[]; by?: string } = {}) {
   if (await loadTrip(env, trip.id)) throw new Error(`已經有 ${trip.id} 這個行程了`)
   const updatedAt = new Date().toISOString()
   const first: Stored = {
@@ -49,7 +49,16 @@ export async function createTrip(env: Env, trip: Trip, summary: string) {
     updatedAt,
     summary,
     trip,
-    log: [{ version: 1, at: updatedAt, source: 'sync', summary, changes: [] }],
+    log: [
+      {
+        version: 1,
+        at: updatedAt,
+        source: options.by ? 'ai' : 'sync',
+        summary,
+        changes: options.changes ?? [],
+        ...(options.by && { by: options.by }),
+      },
+    ],
   }
   const body = JSON.stringify(first)
   await env.TRIPS.put(versionKey(trip.id, 1), body, { expirationTtl: keepSeconds })

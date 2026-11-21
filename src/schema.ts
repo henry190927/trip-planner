@@ -82,6 +82,8 @@ export const itemSchema = z.object({
 })
 
 export const scenes = ['depart', 'concert', 'stroll', 'home'] as const
+export const tripIcons = ['sprout', 'castle', 'plane'] as const
+export const mapProviders = ['naver', 'kakao', 'google'] as const
 
 export const daySchema = z.object({
   date: isoDate,
@@ -208,12 +210,12 @@ export const tripSchema = z.object({
   title: z.string(),
   subtitle: z.string(),
   /** 代表插圖（不用系統 emoji，各平台長得不一樣） */
-  icon: z.enum(['sprout', 'castle', 'plane']).optional(),
+  icon: z.enum(tripIcons).optional(),
   /** IANA 時區，用來判斷「現在」與倒數 */
   timezone: z.string(),
   startDate: isoDate,
   endDate: isoDate,
-  mapProvider: z.enum(['naver', 'kakao', 'google']),
+  mapProvider: z.enum(mapProviders),
   /** 給司機看的卡片上方那句話（當地語言） */
   driverPhrase: z.string().optional(),
   travelers: z.array(travelerSchema).min(1),
@@ -272,7 +274,101 @@ const spotChangesSchema = z
   })
   .partial()
 
+// ---- 行程其他區塊（基本資料、天數、旅伴、班機、住宿、交通、資訊、清單分組）的修改 ----
+// ref 都是用來找目前那一筆的文字：班機用航班號碼或標籤、住宿用名稱、路線用 id 或標題、旅伴用 id 或名字
+
+const tripChangesSchema = z
+  .object({
+    title: z.string().min(1),
+    subtitle: z.string(),
+    icon: z.enum(tripIcons).nullable(),
+    timezone: z.string(),
+    mapProvider: z.enum(mapProviders),
+    driverPhrase: z.string().nullable(),
+  })
+  .partial()
+
+const dayChangesSchema = z.object({ title: z.string().min(1), scene: z.enum(scenes) }).partial()
+
+const travelerChangesSchema = z.object({ name: z.string().min(1), color: z.string(), ink: z.string() }).partial()
+
+const flightChangesSchema = z
+  .object({
+    label: z.string(),
+    date: isoDate,
+    airline: z.string(),
+    number: z.string(),
+    aircraft: z.string().nullable(),
+    cabin: z.string().nullable(),
+    duration: z.string(),
+    /** 只給要改的部分，其他沿用 */
+    from: flightEndSchema.partial(),
+    to: flightEndSchema.partial(),
+    notes: z.array(z.string()).nullable(),
+  })
+  .partial()
+
+const stayChangesSchema = z
+  .object({
+    /** 只給要改的部分，其他沿用 */
+    place: placeSchema.partial(),
+    checkIn: z.string(),
+    checkOut: z.string(),
+    notes: z.array(z.string()).nullable(),
+    verify: z.string().nullable(),
+  })
+  .partial()
+
+const routeChangesSchema = z
+  .object({
+    title: z.string().min(1),
+    who: z.array(z.string()).nullable(),
+    when: z.string().nullable(),
+    summary: z.string(),
+    options: z.array(routeOptionSchema).min(1),
+    fallback: z.array(z.string()).nullable(),
+  })
+  .partial()
+
+const tipChangesSchema = z
+  .object({ title: z.string().min(1), body: z.array(z.string()), level: z.enum(['info', 'warn']).nullable(), links: z.array(linkSchema).nullable() })
+  .partial()
+
+export const sectionOpSchemas = [
+  /** 行程基本資料（名稱、時區、地圖 App…）；日期用 set_dates */
+  z.object({ op: z.literal('update_trip'), tripChanges: tripChangesSchema }),
+  /** 改旅程日期：多出來的日子補成空白的一天；少掉的日子必須已經沒有項目 */
+  z.object({ op: z.literal('set_dates'), startDate: isoDate, endDate: isoDate }),
+  z.object({ op: z.literal('update_day'), date: isoDate, dayChanges: dayChangesSchema }),
+  /** id、顏色省略時自動產生 */
+  z.object({
+    op: z.literal('add_traveler'),
+    traveler: travelerSchema.partial({ id: true, color: true, ink: true }),
+  }),
+  z.object({ op: z.literal('update_traveler'), ref: z.string(), travelerChanges: travelerChangesSchema }),
+  z.object({ op: z.literal('remove_traveler'), ref: z.string() }),
+  z.object({ op: z.literal('add_flight'), flight: flightSchema }),
+  z.object({ op: z.literal('update_flight'), ref: z.string(), flightChanges: flightChangesSchema }),
+  z.object({ op: z.literal('remove_flight'), ref: z.string() }),
+  z.object({ op: z.literal('add_stay'), stay: staySchema }),
+  z.object({ op: z.literal('update_stay'), ref: z.string(), stayChanges: stayChangesSchema }),
+  z.object({ op: z.literal('remove_stay'), ref: z.string() }),
+  /** id 省略時從標題產生 */
+  z.object({ op: z.literal('add_route'), route: routeSchema.extend({ id: z.string().optional() }) }),
+  z.object({ op: z.literal('update_route'), ref: z.string(), routeChanges: routeChangesSchema }),
+  z.object({ op: z.literal('remove_route'), ref: z.string() }),
+  /** 加進資訊分頁的某個分組；分組不存在時自動建立 */
+  z.object({ op: z.literal('add_tip'), section: z.string().min(1), tip: tipSchema }),
+  /** ref：小提醒的標題；不同分組有同樣標題時再加 section 區分 */
+  z.object({ op: z.literal('update_tip'), ref: z.string(), section: z.string().optional(), tipChanges: tipChangesSchema }),
+  z.object({ op: z.literal('remove_tip'), ref: z.string(), section: z.string().optional() }),
+  z.object({ op: z.literal('add_checklist_group'), title: z.string().min(1) }),
+  z.object({ op: z.literal('update_checklist_group'), ref: z.string(), title: z.string().min(1) }),
+  z.object({ op: z.literal('remove_checklist_group'), ref: z.string() }),
+] as const
+
 export const opSchema = z.discriminatedUnion('op', [
+  ...sectionOpSchemas,
   z.object({ op: z.literal('add_item'), date: isoDate, item: itemSchema }),
   /** 插入到已經有安排的時段：自動把後面被蓋到的彈性項目往後推（要有開始與結束時間） */
   z.object({ op: z.literal('insert_item'), date: isoDate, item: itemSchema.extend({ time: hhmm, end: hhmm }) }),
@@ -321,4 +417,5 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('use_alternative'), date: isoDate, title: z.string(), time: hhmm.optional(), index: z.number().int().min(0) }),
 ])
 
-export const opsSchema = z.array(opSchema).min(1).max(20)
+// 建立新行程後一次補齊班機、住宿、每天的標題，動作會比較多
+export const opsSchema = z.array(opSchema).min(1).max(40)

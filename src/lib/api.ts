@@ -27,7 +27,12 @@ export interface Proposal {
   ops: unknown[]
   changes: Change[]
   baseVersion: number
+  /** 建立新行程的提案 */
+  createTripId?: string
 }
+
+/** 「建立新行程」那段對話在手機上的代號（不是真的行程 id） */
+export const NEW_TRIP = 'new-trip'
 export type ChatEvent =
   | { type: 'text'; delta: string }
   | { type: 'status'; text: string }
@@ -106,6 +111,10 @@ export const applyProposal = (tripId: string, p: Proposal) =>
 export const applyManual = (tripId: string, ops: unknown[], summary: string) =>
   post<Versioned & { changes: Change[] }>(`/api/trips/${tripId}/apply`, { ops, summary, source: 'manual' })
 
+/** 套用「建立新行程」的提案 */
+export const createTrip = (p: Proposal) =>
+  post<Versioned & { changes: Change[] }>('/api/trips', { ops: p.ops, summary: p.summary, tripId: p.createTripId })
+
 export const undoLast = (tripId: string) => post<Versioned & { summary: string }>(`/api/trips/${tripId}/undo`)
 
 /** 聊天：逐一 yield 後端送來的事件 */
@@ -120,7 +129,7 @@ export async function* chat(
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ tripId, messages, viewer }),
+    body: JSON.stringify(tripId === NEW_TRIP ? { newTrip: true, messages } : { tripId, messages, viewer }),
     signal,
   })
   if (!res.ok || !res.body) {
