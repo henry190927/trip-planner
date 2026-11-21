@@ -23,6 +23,8 @@ export interface Message {
   streaming?: boolean
   /** 使用者附的圖（只存縮圖，原圖只在送出那一次上傳） */
   images?: string[]
+  /** 回答的模型 */
+  model?: string
 }
 
 interface ChatState {
@@ -87,7 +89,7 @@ export const useChat = create<ChatState>()(
               { role: user.role, text, images: images.map(({ mimeType, data }) => ({ mimeType, data })) },
             ]
             let finished = false
-            for await (const e of chat(tripId, messages, controller.signal, usePrefs.getState().viewer[tripId])) {
+            for await (const e of chat(tripId, messages, controller.signal, usePrefs.getState().viewer[tripId], usePrefs.getState().model)) {
               if (e.type === 'done') finished = true
               patch(tripId, reply.id, (m) => {
                 switch (e.type) {
@@ -101,6 +103,8 @@ export const useChat = create<ChatState>()(
                     return { ...m, proposals: [...(m.proposals ?? []), { proposal: e.proposal, state: 'pending' }] }
                   case 'error':
                     return { ...m, error: e.text }
+                  case 'model':
+                    return { ...m, model: e.label }
                   default:
                     return m
                 }

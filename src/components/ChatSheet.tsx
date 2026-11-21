@@ -9,7 +9,7 @@ import { MAX_IMAGES, prepareImage, type PreparedImage } from '../lib/images'
 import { quickActions } from '../lib/quickActions'
 import { usePrefs } from '../lib/store'
 import { useNow } from '../lib/time'
-import { NEW_TRIP } from '../lib/api'
+import { NEW_TRIP, fetchModels, type ModelOption } from '../lib/api'
 import RichText from './RichText'
 import UndoButton from './UndoButton'
 import { useTrips } from '../lib/tripStore'
@@ -200,9 +200,46 @@ function Bubble({ m, tripId }: { m: Message; tripId: string }) {
           />
         ))}
         {m.error && <p className="mt-2 rounded-2xl bg-peach/40 px-3 py-2 text-xs font-bold text-peach-ink">{m.error}</p>}
-        {!m.streaming && m.text && <CopyButton text={() => messageText(m)} label="複製回覆" className="mt-1 px-1.5 py-1" />}
+        {!m.streaming && (m.text || m.model) && (
+          <div className="mt-1 flex items-center gap-1">
+            {m.text && <CopyButton text={() => messageText(m)} label="複製回覆" className="px-1.5 py-1" />}
+            {m.model && <span className="text-[10px] font-bold text-mute/80">{m.model}</span>}
+          </div>
+        )}
       </div>
     </div>
+  )
+}
+
+const coolingNote = (o: ModelOption) => (o.cooling === 429 ? '（額度暫時用完）' : o.cooling === 503 ? '（塞車中）' : o.cooling ? '（暫時不能用）' : '')
+
+/** 選小樹先用哪個模型；選的模型塞車或額度用完時，會自動改用其他的（回答下方會寫是哪個模型） */
+function ModelPicker() {
+  const model = usePrefs((s) => s.model)
+  const setModel = usePrefs((s) => s.setModel)
+  const [options, setOptions] = useState<ModelOption[]>([])
+  useEffect(() => {
+    fetchModels().then(
+      (r) => setOptions(r.models),
+      () => undefined,
+    )
+  }, [])
+  return (
+    <select
+      aria-label="AI 模型"
+      value={model ?? ''}
+      onChange={(e) => setModel(e.target.value || undefined)}
+      className="max-w-44 truncate rounded-full bg-cream py-0.5 pl-2 pr-1 text-[11px] font-bold text-mute outline-none"
+    >
+      <option value="">模型：自動</option>
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.label}
+          {coolingNote(o)}
+        </option>
+      ))}
+      {model && !options.some((o) => o.id === model) && <option value={model}>{model}</option>}
+    </select>
   )
 }
 
@@ -363,7 +400,10 @@ export default function ChatSheet({ trip, floating = true }: { trip?: Trip; floa
                 <MiniSprout />
                 <div className="min-w-0 flex-1">
                   <p className="font-black leading-tight">小樹</p>
-                  <p className="text-[11px] font-bold text-mute">{trip ? '會上網查資料・改行程前先問你' : '建立新行程'}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {!trip && <span className="text-[11px] font-bold text-mute">建立新行程</span>}
+                    <ModelPicker />
+                  </div>
                 </div>
                 {messages.length > 0 && !busy && (
                   <CopyButton text={() => conversationText(messages)} label="複製整段對話" className="size-9 justify-center bg-cream text-ink" iconOnly />

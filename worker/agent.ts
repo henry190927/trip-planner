@@ -4,7 +4,7 @@ import { freeWindows, overlaps } from '../src/lib/plan'
 import { hidePrivate } from '../src/lib/visibility'
 import type { Trip } from '../src/types'
 import type { Env } from './env'
-import { GeminiError, streamGenerate, type Content, type Part } from './gemini'
+import { GeminiError, modelLabel, streamGenerate, type Content, type Part } from './gemini'
 import { MAX_QUERIES, searchMany, type SearchResult, type Source } from './search'
 import type { Stored } from './store'
 
@@ -14,6 +14,8 @@ export type ChatEvent =
   | { type: 'status'; text: string }
   | { type: 'sources'; sources: Source[] }
   | { type: 'proposal'; proposal: Proposal }
+  /** 這次實際回答的模型（選的模型塞車時會改用別的） */
+  | { type: 'model'; id: string; label: string }
   | { type: 'error'; text: string }
   | { type: 'done' }
 
@@ -577,6 +579,7 @@ export async function runAgent(
   emit: (e: ChatEvent) => void,
   viewer?: string,
   mode: AgentMode = 'edit',
+  preferredModel?: string,
 ) {
   // 別人的私人小任務不給模型看，免得說溜嘴；修改還是套在完整的行程上
   const visible = hidePrivate(stored.trip, viewer)
@@ -600,6 +603,13 @@ export async function runAgent(
     if (saidApply && proposals === 0) emit({ type: 'text', delta: '\n\n（剛剛沒有成功產生修改，所以沒有「套用」按鈕；可以再說一次要怎麼改。）' })
   }
 
+  let announced = ''
+  const onModel = (model: string) => {
+    if (model === announced) return
+    announced = model
+    emit({ type: 'model', id: model, label: modelLabel(model) })
+  }
+
   for (let step = 0; step < MAX_STEPS; step++) {
     const parts: Part[] = []
     try {
@@ -612,6 +622,8 @@ export async function runAgent(
           generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
         },
         onRetry,
+        preferredModel,
+        onModel,
       )) {
         for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
           parts.push(part)

@@ -165,14 +165,25 @@ function linkSpot(trip: Trip, item: Item) {
   if (match) item.spotId = match.id
 }
 
+/**
+ * 先建立「別的動作會用到」的東西：日期（天數）、行程基本資料、旅伴、清單分組、路線、地點。
+ * 模型不一定照順序送（例如先改 12/23 的標題才設定日期），同一類之間維持原本的順序
+ */
+const firstOps: Op['op'][] = ['set_dates', 'update_trip', 'add_traveler', 'add_checklist_group', 'add_route', 'add_spot']
+const orderOf = (op: Op) => {
+  const i = firstOps.indexOf(op.op)
+  return i === -1 ? firstOps.length : i
+}
+
 /** 套用修改動作。不會改到傳入的 trip；有任何錯誤時 errors 不為空，trip 不可使用 */
 export function applyOps(source: Trip, ops: Op[]): ApplyResult {
   const trip = structuredClone(source)
   const changes: Change[] = []
   const errors: string[] = []
   const dayOf = (date: string) => trip.days.find((d) => d.date === date)
+  const ordered = ops.map((op, i) => ({ op, i })).sort((a, b) => orderOf(a.op) - orderOf(b.op) || a.i - b.i)
 
-  for (const op of ops) {
+  for (const { op } of ordered) {
     switch (op.op) {
       case 'add_item': {
         const day = dayOf(op.date)
@@ -263,7 +274,12 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
           errors.push(`清單裡沒有「${op.group}」這一組（現有：${trip.checklist.map((g) => g.title).join('、')}）`)
           break
         }
-        group.items.push({ id: `ai-${Date.now().toString(36)}-${group.items.length}`, label: op.label })
+        // id 要在整份清單裡不重複（同一次可能在好幾個分組各加一項）
+        const taken = new Set(trip.checklist.flatMap((g) => g.items.map((i) => i.id)))
+        const base = `ai-${Date.now().toString(36)}`
+        let id = base
+        for (let n = 2; taken.has(id); n++) id = `${base}-${n}`
+        group.items.push({ id, label: op.label })
         changes.push({ kind: 'add', text: `清單「${op.group}」：${op.label}` })
         break
       }

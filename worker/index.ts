@@ -21,7 +21,7 @@ import {
 } from './auth'
 import { imageError } from './images'
 import type { Env } from './env'
-import { GeminiError } from './gemini'
+import { GeminiError, modelStatus } from './gemini'
 import { blankTrip, newTripId } from '../src/lib/sectionOps'
 import { validateTrip } from '../src/lib/validate'
 import { createTrip, loadTrip, saveTrip, tripIds, undo, type Stored } from './store'
@@ -40,7 +40,8 @@ export { GeminiRelay } from './relay-object'
 //   POST /api/auth/profile                改自己的名字
 //   GET  /api/trips                       所有行程的最新版本
 //   POST /api/trips                       建立新行程（小樹在空白草稿上提的修改）
-//   POST /api/chat                        和小樹聊天（SSE 串流）
+//   GET  /api/models                      可以選的 AI 模型與目前能不能用
+//   POST /api/chat                        和小樹聊天（SSE 串流）；model 指定先用哪個模型
 //   POST /api/trips/:id/apply             套用修改
 //   POST /api/trips/:id/undo              復原最新一次修改
 
@@ -96,6 +97,7 @@ async function chat(req: Request, env: Env) {
     tripId?: string
     newTrip?: boolean
     viewer?: string
+    model?: string
     messages?: (ChatMessage & { images?: ChatImage[] })[]
   } | null
   const creating = body?.newTrip === true
@@ -126,7 +128,7 @@ async function chat(req: Request, env: Env) {
     try {
       // 只認得行程裡的旅伴 id
       const viewer = stored.trip.travelers.some((t) => t.id === body?.viewer) ? body!.viewer : undefined
-      await runAgent(env, stored, messages, emit, viewer, creating ? 'create' : 'edit')
+      await runAgent(env, stored, messages, emit, viewer, creating ? 'create' : 'edit', typeof body?.model === 'string' ? body.model : undefined)
     } catch (e) {
       console.error(e)
       emit({ type: 'error', text: geminiMessage(e) })
@@ -172,6 +174,8 @@ async function authRoutes(req: Request, env: Env, path: string): Promise<Respons
 
 async function signedInRoutes(req: Request, env: Env, path: string, user: User, ctx: ExecutionContext): Promise<Response> {
   if (req.method === 'GET' && path === '/api/me') return json({ user: publicUser(user) })
+
+  if (req.method === 'GET' && path === '/api/models') return json({ models: await modelStatus(env) })
 
   if (req.method === 'GET' && path === '/api/trips') {
     const all = await Promise.all((await tripIds(env)).map((id) => loadTrip(env, id)))

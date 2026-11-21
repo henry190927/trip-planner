@@ -260,3 +260,36 @@ test.describe('聊天框的捲動', () => {
     await expect(jump).toBeHidden()
   })
 })
+
+test('選 AI 模型：選了會送給後端，回答下面寫是哪個模型回答的', async ({ page }) => {
+  await page.route('**/api/models', (r) =>
+    r.fulfill({
+      json: {
+        models: [
+          { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', cooling: 429 },
+          { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+        ],
+      },
+    }),
+  )
+  let body: Record<string, unknown> = {}
+  await page.route('**/api/chat', (r) => {
+    body = r.request().postDataJSON() as Record<string, unknown>
+    const events = [{ type: 'model', id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' }, { type: 'text', delta: '好的' }, { type: 'done' }]
+    return r.fulfill({ contentType: 'text/event-stream', body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') })
+  })
+  await page.goto(`./${trip}`)
+  await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+  const dialog = page.getByRole('dialog', { name: '旅行小幫手' })
+  const picker = dialog.getByRole('combobox', { name: 'AI 模型' })
+  await expect(picker.locator('option', { hasText: 'Gemini 3.6 Flash（額度暫時用完）' })).toHaveCount(1)
+  await picker.selectOption('gemini-3.1-flash-lite')
+  await dialog.getByRole('textbox', { name: '訊息' }).fill('嗨')
+  await dialog.getByRole('button', { name: '送出' }).click()
+  await expect(dialog.locator('span', { hasText: /^Gemini 3.1 Flash-Lite$/ })).toBeVisible()
+  expect(body.model).toBe('gemini-3.1-flash-lite')
+  // 選擇記在這支手機上
+  await page.reload()
+  await page.getByRole('button', { name: '打開旅行小幫手' }).click()
+  await expect(page.getByRole('combobox', { name: 'AI 模型' })).toHaveValue('gemini-3.1-flash-lite')
+})

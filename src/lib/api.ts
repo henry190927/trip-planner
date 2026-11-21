@@ -38,6 +38,7 @@ export type ChatEvent =
   | { type: 'status'; text: string }
   | { type: 'sources'; sources: Source[] }
   | { type: 'proposal'; proposal: Proposal }
+  | { type: 'model'; id: string; label: string }
   | { type: 'error'; text: string }
   | { type: 'done' }
 
@@ -102,6 +103,14 @@ export interface Versioned {
   log?: LogEntry[]
 }
 
+export interface ModelOption {
+  id: string
+  label: string
+  /** 冷卻中：429 額度暫時用完、503 塞車、其他是暫時不能用 */
+  cooling?: number
+}
+export const fetchModels = () => request<{ models: ModelOption[] }>('/api/models', { cache: 'no-store' })
+
 export const fetchTrips = () => request<{ trips: Versioned[] }>('/api/trips', { cache: 'no-store' })
 
 export const applyProposal = (tripId: string, p: Proposal) =>
@@ -124,12 +133,14 @@ export async function* chat(
   signal?: AbortSignal,
   /** 「看誰的行程」選的人：別人的私人小任務不會給小樹看 */
   viewer?: string,
+  /** 先用哪個模型（沒選就照預設順序） */
+  model?: string,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(tripId === NEW_TRIP ? { newTrip: true, messages } : { tripId, messages, viewer }),
+    body: JSON.stringify({ ...(tripId === NEW_TRIP ? { newTrip: true } : { tripId, viewer }), messages, ...(model && { model }) }),
     signal,
   })
   if (!res.ok || !res.body) {

@@ -146,3 +146,35 @@ it('一次最多 40 個動作', () => {
   expect(opsSchema.safeParse(many).success).toBe(false)
   expect(opsSchema.safeParse(many.slice(0, 40)).success).toBe(true)
 })
+
+describe('建立新行程時模型送來的順序', () => {
+  it('先改某一天才設定日期、清單項目寫在分組前面：一樣套得上', async () => {
+    const { blankTrip } = await import('./sectionOps')
+    const r = applyOps(
+      blankTrip(['我', '她'], '2026-11-21'),
+      opsSchema.parse([
+        { op: 'update_day', date: '2026-12-23', dayChanges: { title: '海雲台' } },
+        { op: 'add_checklist_item', group: '證件與錢', label: '護照' },
+        { op: 'update_trip', tripChanges: { title: '釜山', timezone: 'Asia/Seoul', mapProvider: 'naver' } },
+        { op: 'set_dates', startDate: '2026-12-22', endDate: '2026-12-26' },
+        { op: 'add_checklist_group', title: '證件與錢' },
+        { op: 'add_checklist_group', title: 'App 與網路' },
+        { op: 'add_checklist_item', group: 'App 與網路', label: 'Naver Map' },
+      ]),
+    )
+    expect(r.errors).toEqual([])
+    expect(r.trip.days.find((d) => d.date === '2026-12-23')!.title).toBe('海雲台')
+    expect(r.trip.checklist.map((g) => g.items.map((i) => i.label))).toEqual([['護照'], ['Naver Map']])
+  })
+
+  it('同一次在不同分組各加清單項目，id 不會重複', () => {
+    const r = apply([
+      { op: 'add_checklist_group', title: 'A' },
+      { op: 'add_checklist_group', title: 'B' },
+      { op: 'add_checklist_item', group: 'A', label: '一' },
+      { op: 'add_checklist_item', group: 'B', label: '二' },
+      { op: 'add_checklist_item', group: 'B', label: '三' },
+    ])
+    expect(r.errors).toEqual([])
+  })
+})

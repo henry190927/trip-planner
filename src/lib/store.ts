@@ -11,6 +11,9 @@ interface PrefsState {
   seen: Record<string, number>
   /** 收起來的區塊（例如 `${tripId}:planned`） */
   collapsed: string[]
+  /** 小樹先用哪個 AI 模型；沒選＝自動 */
+  model?: string
+  setModel: (model: string | undefined) => void
   toggleCollapsed: (key: string) => void
   setViewer: (tripId: string, travelerId: string | undefined) => void
   markSeen: (tripId: string, version: number) => void
@@ -40,6 +43,7 @@ export const usePrefs = create<PrefsState>()(
       checked: {},
       seen: {},
       collapsed: [],
+      setModel: (model) => set({ model }),
       toggleCollapsed: (key) =>
         set((s) => ({ collapsed: s.collapsed.includes(key) ? s.collapsed.filter((k) => k !== key) : [...s.collapsed, key] })),
       markSeen: (tripId, version) => set((s) => (version > (s.seen[tripId] ?? -1) ? { seen: { ...s.seen, [tripId]: version } } : s)),

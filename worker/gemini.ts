@@ -40,16 +40,37 @@ const cooldownKey = (model: string) => `cooldown:${model}`
 // 塞車一分鐘（KV 最短的期限）、額度用完 15 分鐘、不開放的 6 小時
 const cooldownSeconds = (status: number) => (status === 503 ? 60 : status === 429 ? 15 * 60 : 6 * 3600)
 
-async function availableModels(env: Env) {
-  const all = [env.MODEL, ...env.FALLBACK_MODELS.split(',').map((m) => m.trim())].filter(Boolean)
+/** 可以用的模型，依預設順序：主模型在前，後面是塞車時的備用 */
+export const modelList = (env: Env) => [env.MODEL, ...env.FALLBACK_MODELS.split(',').map((m) => m.trim())].filter(Boolean)
+
+/** 給畫面看的模型名稱，例如 gemini-3.6-flash → Gemini 3.6 Flash */
+export const modelLabel = (id: string) =>
+  id
+    .replace(/^gemini-/, 'Gemini ')
+    .replace(/-latest$/, '（最新）')
+    .replace(/-/g, ' ')
+    .replace(/\b(flash|lite|pro)\b/gi, (w) => w[0].toUpperCase() + w.slice(1))
+    .replace('Flash Lite', 'Flash-Lite')
+
+/** 每個模型目前能不能用（冷卻中＝額度暫時用完或塞車） */
+export async function modelStatus(env: Env) {
+  const all = modelList(env)
   const cooling = await Promise.all(all.map((m) => env.TRIPS.get(cooldownKey(m))))
-  const ready = all.filter((_, i) => !cooling[i])
-  // 全部都在冷卻就還是照順序試，總比直接放棄好
-  return ready.length ? ready : all
+  return all.map((id, i) => ({ id, label: modelLabel(id), cooling: cooling[i] ? Number(cooling[i]) : undefined }))
 }
 
-async function call(env: Env, method: string, body: unknown, query = '', onRetry?: () => void) {
-  const models = await availableModels(env)
+export async function availableModels(env: Env, preferred?: string) {
+  const all = modelList(env)
+  // 使用者選的模型排第一個，塞車或額度用完時照原本的順序改用其他的
+  const ordered = preferred && all.includes(preferred) ? [preferred, ...all.filter((m) => m !== preferred)] : all
+  const cooling = await Promise.all(ordered.map((m) => env.TRIPS.get(cooldownKey(m))))
+  const ready = ordered.filter((_, i) => !cooling[i])
+  // 全部都在冷卻就還是照順序試，總比直接放棄好
+  return ready.length ? ready : ordered
+}
+
+async function call(env: Env, method: string, body: unknown, query = '', onRetry?: () => void, preferred?: string, onModel?: (model: string) => void) {
+  const models = await availableModels(env, preferred)
   let error: GeminiError | undefined
   const attempts = models.flatMap((model) => BUSY_WAITS.map((wait) => ({ model, wait })))
   for (const { model, wait } of attempts) {
@@ -63,7 +84,10 @@ async function call(env: Env, method: string, body: unknown, query = '', onRetry
       headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
       body: JSON.stringify(body),
     })
-    if (res.ok) return res
+    if (res.ok) {
+      onModel?.(model)
+      return res
+    }
     const detail = await res.text()
     console.error(`Gemini ${model} ${method} ${res.status}`, detail.slice(0, 2000))
     let message = detail
@@ -85,8 +109,14 @@ interface Chunk {
 }
 
 /** 串流呼叫：每收到一段就 yield 一次 */
-export async function* streamGenerate(env: Env, body: unknown, onRetry?: () => void): AsyncGenerator<Chunk> {
-  const res = await call(env, 'streamGenerateContent', body, '?alt=sse', onRetry)
+export async function* streamGenerate(
+  env: Env,
+  body: unknown,
+  onRetry?: () => void,
+  preferred?: string,
+  onModel?: (model: string) => void,
+): AsyncGenerator<Chunk> {
+  const res = await call(env, 'streamGenerateContent', body, '?alt=sse', onRetry, preferred, onModel)
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
   for (;;) {
