@@ -14,6 +14,7 @@
     "check": "npm run lint && tsc -b && tsc -p worker && npm test",
     "push-trip": "tsx scripts/push-trip.ts",
     "pull-trip": "tsx scripts/pull-trip.ts",
+    "apply-ops": "tsx scripts/apply-ops.ts",
     "invite": "tsx scripts/invite.ts",
     "users": "tsx scripts/users.ts",
     "deploy": "npm run build && wrangler deploy"

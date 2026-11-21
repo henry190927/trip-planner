@@ -246,6 +246,7 @@ worker/
 scripts/              用你登入的 wrangler 直接讀寫線上 KV
   push-trip.ts      把電腦上的行程檔放上線（建立或取代）
   pull-trip.ts      把線上最新版存到 private/
+  apply-ops.ts      對線上最新版套用修改動作（跟小樹同一套，不會蓋掉 App 裡的修改）
   invite.ts         產生邀請連結（第一次設定、或恢復用）
   users.ts          列出帳號與裝置
 test/fixtures/      測試用的行程
