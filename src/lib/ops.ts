@@ -269,10 +269,12 @@ export function applyOps(source: Trip, ops: Op[]): ApplyResult {
         break
       }
       case 'add_checklist_item': {
-        const group = trip.checklist.find((g) => g.title === op.group)
+        // 分組不存在就自動建立（模型常常直接加項目、沒先建分組）
+        let group = trip.checklist.find((g) => g.title === op.group)
         if (!group) {
-          errors.push(`清單裡沒有「${op.group}」這一組（現有：${trip.checklist.map((g) => g.title).join('、')}）`)
-          break
+          group = { title: op.group, items: [] }
+          trip.checklist.push(group)
+          changes.push({ kind: 'add', text: `清單分組：${op.group}` })
         }
         // id 要在整份清單裡不重複（同一次可能在好幾個分組各加一項）
         const taken = new Set(trip.checklist.flatMap((g) => g.items.map((i) => i.id)))

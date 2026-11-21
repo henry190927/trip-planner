@@ -178,3 +178,13 @@ describe('建立新行程時模型送來的順序', () => {
     expect(r.errors).toEqual([])
   })
 })
+
+it('加清單項目時分組不存在就自動建立', () => {
+  const r = apply([
+    { op: 'add_checklist_item', group: '慶生', label: '蛋糕' },
+    { op: 'add_checklist_item', group: '慶生', label: '卡片' },
+  ])
+  expect(r.errors).toEqual([])
+  expect(r.trip.checklist.at(-1)).toMatchObject({ title: '慶生', items: [{ label: '蛋糕' }, { label: '卡片' }] })
+  expect(r.changes.map((c) => c.text)).toEqual(['清單分組：慶生', '清單「慶生」：蛋糕', '清單「慶生」：卡片'])
+})
